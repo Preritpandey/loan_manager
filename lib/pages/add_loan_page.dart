@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 
-
 class AddLoanPage extends StatelessWidget {
   final controller = Get.find<LoanController>();
   final formKey = GlobalKey<FormState>();
@@ -25,7 +24,11 @@ class AddLoanPage extends StatelessWidget {
               children: [
                 _buildTextField('Loan Taker Name', 'name'),
                 _buildTextField('Duration (days)', 'duration', isNumber: true),
-                _buildTextField('Interest Rate (%)', 'interestRate', isNumber: true),
+                _buildTextField(
+                  'Interest Rate (%)',
+                  'interestRate',
+                  isNumber: true,
+                ),
                 _buildTextField('Gold/Silver', 'type'),
                 _buildTextField('Jewellery Name', 'jewelleryName'),
                 _buildTextField('Serial Number', 'serialNumber'),
@@ -38,24 +41,26 @@ class AddLoanPage extends StatelessWidget {
                   onPressed: () {
                     if (formKey.currentState!.validate()) {
                       formKey.currentState!.save();
-                      controller.addLoan(Loan(
-                        name: data['name'],
-                        date: DateTime.now(),
-                        duration: int.parse(data['duration']),
-                        interestRate: double.parse(data['interestRate']),
-                        type: data['type'],
-                        jewelleryName: data['jewelleryName'],
-                        serialNumber: data['serialNumber'],
-                        phone: data['phone'],
-                        address: data['address'],
-                        description: data['description'],
-                        amountGiven: double.parse(data['amountGiven']),
-                      ));
+                      controller.addLoan(
+                        Loan(
+                          name: data['name'],
+                          date: DateTime.now(),
+                          duration: int.parse(data['duration']),
+                          interestRate: double.parse(data['interestRate']),
+                          type: data['type'],
+                          jewelleryName: data['jewelleryName'],
+                          serialNumber: data['serialNumber'],
+                          phone: data['phone'],
+                          address: data['address'],
+                          description: data['description'],
+                          amountGiven: double.parse(data['amountGiven']),
+                        ),
+                      );
                       Get.back();
                     }
                   },
                   child: const Text('Add Loan'),
-                )
+                ),
               ],
             ),
           ),
@@ -68,10 +73,14 @@ class AddLoanPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
-        decoration: InputDecoration(labelText: label, border: OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+        ),
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
         onSaved: (value) => data[key] = value,
-        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+        validator: (value) =>
+            value == null || value.isEmpty ? 'Required' : null,
       ),
     );
   }
