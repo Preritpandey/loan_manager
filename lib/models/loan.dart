@@ -28,6 +28,8 @@ class Loan extends HiveObject {
   double amountGiven;
   @HiveField(11)
   double amountReceived;
+  @HiveField(12)
+  List<PartialRepayment> partialRepayments;
 
   Loan({
     required this.name,
@@ -42,28 +44,72 @@ class Loan extends HiveObject {
     required this.description,
     required this.amountGiven,
     this.amountReceived = 0.0,
-  });
+    List<PartialRepayment>? partialRepayments,
+  }) : partialRepayments = partialRepayments ?? [];
+
+  // Calculate effective days for interest calculation
+  int get effectiveDaysForInterest {
+    final daysPassed = this.daysPassed;
+
+    // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
+    if (duration <= 30) {
+      return daysPassed <= 30 ? 30 : daysPassed;
+    }
+
+    // Rule 2: For loans longer than 30 days, use actual days passed (up to duration)
+    return daysPassed <= duration ? daysPassed : duration;
+  }
+
+  // Calculate interest based on remaining balance after partial repayments
+  double get calculatedInterest {
+    double currentBalance = amountGiven;
+    double totalInterest = 0.0;
+    int lastCalculationDay = 0;
+
+    // Sort partial repayments by date
+    final sortedRepayments = List<PartialRepayment>.from(partialRepayments)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    // Calculate interest for each period between repayments
+    for (final repayment in sortedRepayments) {
+      final daysSinceLastCalculation =
+          repayment.daysSinceLoan - lastCalculationDay;
+      if (daysSinceLastCalculation > 0) {
+        totalInterest +=
+            (currentBalance * interestRate / 100) * daysSinceLastCalculation;
+      }
+      currentBalance -= repayment.amount;
+      lastCalculationDay = repayment.daysSinceLoan;
+    }
+
+    // Calculate interest for the remaining period
+    final remainingDays = effectiveDaysForInterest - lastCalculationDay;
+    if (remainingDays > 0) {
+      totalInterest += (currentBalance * interestRate / 100) * remainingDays;
+    }
+
+    return totalInterest;
+  }
 
   double get acquiredInterest {
-    // Full interest is calculated immediately when loan is given
-    final fullInterest = (amountGiven * interestRate) / 100 * duration;
-    return fullInterest;
+    // Use the new calculated interest method
+    return calculatedInterest;
   }
 
   double get compoundInterest {
-    // Full interest is calculated immediately when loan is given
-    final fullInterest = (amountGiven * interestRate) / 100 * duration;
+    // Base interest calculation
+    double baseInterest = calculatedInterest;
 
     // If overdue, add additional interest on the total due amount
     if (isOverdue) {
-      final totalDueAtDueDate = amountGiven + fullInterest;
+      final totalDueAtDueDate = amountGiven + baseInterest;
       final overdueDays = this.overdueDays;
       final overdueInterestPerDay = (totalDueAtDueDate * interestRate) / 100;
       final overdueInterest = overdueInterestPerDay * overdueDays;
-      return fullInterest + overdueInterest;
+      return baseInterest + overdueInterest;
     }
 
-    return fullInterest;
+    return baseInterest;
   }
 
   double get dueAmount {
@@ -85,9 +131,8 @@ class Loan extends HiveObject {
   }
 
   double get totalDueAtDueDate {
-    // This is the fixed amount due at the end of the agreed period
-    final agreedPeriodInterest = (amountGiven * interestRate) / 100 * duration;
-    return amountGiven + agreedPeriodInterest;
+    // This is the amount due at the end of the agreed period with new interest calculation
+    return amountGiven + calculatedInterest;
   }
 
   double get overdueInterest {
@@ -104,7 +149,7 @@ class Loan extends HiveObject {
   }
 
   double get agreedPeriodInterest {
-    return (amountGiven * interestRate) / 100 * duration;
+    return calculatedInterest;
   }
 
   double get currentInterest {
@@ -123,8 +168,47 @@ class Loan extends HiveObject {
     return amountGiven - amountReceived;
   }
 
-  // New getter for immediate total due (principal + full interest)
+  // New getter for immediate total due (principal + calculated interest)
   double get immediateTotalDue {
-    return amountGiven + agreedPeriodInterest;
+    return amountGiven + calculatedInterest;
   }
+
+  // Method to add partial repayment
+  void addPartialRepayment(double amount, DateTime repaymentDate) {
+    final daysSinceLoan = repaymentDate.difference(date).inDays;
+    partialRepayments.add(
+      PartialRepayment(
+        amount: amount,
+        date: repaymentDate,
+        daysSinceLoan: daysSinceLoan,
+      ),
+    );
+    amountReceived += amount;
+    save();
+  }
+
+  // Get current balance after all partial repayments
+  double get currentBalance {
+    return amountGiven -
+        partialRepayments.fold(0.0, (sum, repayment) => sum + repayment.amount);
+  }
+}
+
+// New class to track partial repayments
+@HiveType(typeId: 1)
+class PartialRepayment {
+  @HiveField(0)
+  double amount;
+
+  @HiveField(1)
+  DateTime date;
+
+  @HiveField(2)
+  int daysSinceLoan;
+
+  PartialRepayment({
+    required this.amount,
+    required this.date,
+    required this.daysSinceLoan,
+  });
 }

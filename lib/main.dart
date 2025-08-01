@@ -8,6 +8,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   Hive.registerAdapter(LoanAdapter());
+  Hive.registerAdapter(PartialRepaymentAdapter());
   await Hive.openBox<Loan>('loans');
 
   runApp(const MyApp());

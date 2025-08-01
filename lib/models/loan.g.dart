@@ -29,13 +29,14 @@ class LoanAdapter extends TypeAdapter<Loan> {
       description: fields[9] as String,
       amountGiven: fields[10] as double,
       amountReceived: fields[11] as double,
+      partialRepayments: (fields[12] as List?)?.cast<PartialRepayment>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Loan obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -59,7 +60,9 @@ class LoanAdapter extends TypeAdapter<Loan> {
       ..writeByte(10)
       ..write(obj.amountGiven)
       ..writeByte(11)
-      ..write(obj.amountReceived);
+      ..write(obj.amountReceived)
+      ..writeByte(12)
+      ..write(obj.partialRepayments);
   }
 
   @override
@@ -69,6 +72,46 @@ class LoanAdapter extends TypeAdapter<Loan> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is LoanAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class PartialRepaymentAdapter extends TypeAdapter<PartialRepayment> {
+  @override
+  final int typeId = 1;
+
+  @override
+  PartialRepayment read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return PartialRepayment(
+      amount: fields[0] as double,
+      date: fields[1] as DateTime,
+      daysSinceLoan: fields[2] as int,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, PartialRepayment obj) {
+    writer
+      ..writeByte(3)
+      ..writeByte(0)
+      ..write(obj.amount)
+      ..writeByte(1)
+      ..write(obj.date)
+      ..writeByte(2)
+      ..write(obj.daysSinceLoan);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PartialRepaymentAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

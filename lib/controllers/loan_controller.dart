@@ -1,4 +1,3 @@
-// controllers/loan_controller.dart
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:list/models/loan.dart';
@@ -22,7 +21,7 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
     } catch (e) {
       print('Error loading loans: $e');
-      Get.snackbar('Error', 'Failed to load loans');
+      _showSnackbar('Error', 'Failed to load loans');
     } finally {
       isLoading.value = false;
     }
@@ -34,24 +33,24 @@ class LoanController extends GetxController {
       if (loans.any(
         (existingLoan) => existingLoan.serialNumber == loan.serialNumber,
       )) {
-        Get.snackbar('Error', 'Serial number already exists');
+        _showSnackbar('Error', 'Serial number already exists');
         return;
       }
 
       loanBox.add(loan);
       loans.add(loan);
       filteredLoans.value = loans;
-      Get.snackbar('Success', 'Loan added successfully');
+      _showSnackbar('Success', 'Loan added successfully');
     } catch (e) {
       print('Error adding loan: $e');
-      Get.snackbar('Error', 'Failed to add loan');
+      _showSnackbar('Error', 'Failed to add loan');
     }
   }
 
   void updateReceivedAmount(int index, double amount) {
     try {
       if (index < 0 || index >= loans.length) {
-        Get.snackbar('Error', 'Invalid loan index');
+        _showSnackbar('Error', 'Invalid loan index');
         return;
       }
 
@@ -60,10 +59,10 @@ class LoanController extends GetxController {
       loan.save();
       loans[index] = loan;
       filteredLoans.value = loans;
-      Get.snackbar('Success', 'Amount updated successfully');
+      _showSnackbar('Success', 'Amount updated successfully');
     } catch (e) {
       print('Error updating amount: $e');
-      Get.snackbar('Error', 'Failed to update amount');
+      _showSnackbar('Error', 'Failed to update amount');
     }
   }
 
@@ -73,7 +72,7 @@ class LoanController extends GetxController {
         (loan) => loan.serialNumber == serialNumber,
       );
       if (loanIndex == -1) {
-        Get.snackbar('Error', 'Loan not found');
+        _showSnackbar('Error', 'Loan not found');
         return;
       }
 
@@ -84,7 +83,85 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
     } catch (e) {
       print('Error updating amount by serial: $e');
-      Get.snackbar('Error', 'Failed to update amount');
+      _showSnackbar('Error', 'Failed to update amount');
+    }
+  }
+
+  // New method to add partial repayment
+  void addPartialRepayment(
+    String serialNumber,
+    double amount,
+    DateTime repaymentDate,
+  ) {
+    try {
+      final loanIndex = loans.indexWhere(
+        (loan) => loan.serialNumber == serialNumber,
+      );
+      if (loanIndex == -1) {
+        _showSnackbar('Error', 'Loan not found');
+        return;
+      }
+
+      final loan = loans[loanIndex];
+
+      // Validate repayment amount
+      if (amount <= 0) {
+        _showSnackbar('Error', 'Repayment amount must be greater than 0');
+        return;
+      }
+
+      if (amount > loan.currentBalance) {
+        _showSnackbar(
+          'Error',
+          'Repayment amount cannot exceed remaining balance',
+        );
+        return;
+      }
+
+      // Add partial repayment
+      loan.addPartialRepayment(amount, repaymentDate);
+
+      // Update the loan in the list
+      loans[loanIndex] = loan;
+      filteredLoans.value = loans;
+
+      _showSnackbar('Success', 'Partial repayment added successfully');
+    } catch (e) {
+      print('Error adding partial repayment: $e');
+      _showSnackbar('Error', 'Failed to add partial repayment');
+    }
+  }
+
+  // Helper method to safely show snackbars
+  void _showSnackbar(String title, String message) {
+    try {
+      // Close any existing snackbars first
+      if (Get.isSnackbarOpen) {
+        Get.closeCurrentSnackbar();
+      }
+
+      // Add a small delay to ensure proper cleanup
+      Future.delayed(const Duration(milliseconds: 100), () {
+        Get.snackbar(
+          title,
+          message,
+          duration: const Duration(seconds: 3),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      });
+    } catch (e) {
+      print('Error showing snackbar: $e');
+    }
+  }
+
+  // Method to get partial repayments for a loan
+  List<PartialRepayment> getPartialRepayments(String serialNumber) {
+    try {
+      final loan = getLoanBySerial(serialNumber);
+      return loan?.partialRepayments ?? [];
+    } catch (e) {
+      print('Error getting partial repayments: $e');
+      return [];
     }
   }
 
@@ -124,7 +201,7 @@ class LoanController extends GetxController {
         (loan) => loan.serialNumber == serialNumber,
       );
       if (loanIndex == -1) {
-        Get.snackbar('Error', 'Loan not found');
+        _showSnackbar('Error', 'Loan not found');
         return;
       }
 
@@ -132,10 +209,10 @@ class LoanController extends GetxController {
       loan.delete();
       loans.removeAt(loanIndex);
       filteredLoans.value = loans;
-      Get.snackbar('Success', 'Loan deleted successfully');
+      _showSnackbar('Success', 'Loan deleted successfully');
     } catch (e) {
       print('Error deleting loan: $e');
-      Get.snackbar('Error', 'Failed to delete loan');
+      _showSnackbar('Error', 'Failed to delete loan');
     }
   }
 
@@ -343,10 +420,20 @@ class LoanController extends GetxController {
     }
   }
 
-  // Calculate early repayment amount for a loan
+  // Calculate early repayment amount for a loan (updated for new rules)
   double calculateEarlyRepaymentAmount(Loan loan) {
     try {
       final daysPassed = loan.daysPassed;
+
+      // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
+      if (loan.duration <= 30) {
+        final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
+        final actualInterest =
+            (loan.amountGiven * loan.interestRate) / 100 * effectiveDays;
+        return loan.amountGiven + actualInterest;
+      }
+
+      // Rule 2: For loans longer than 30 days, use actual days passed
       final actualInterest =
           (loan.amountGiven * loan.interestRate) / 100 * daysPassed;
       return loan.amountGiven + actualInterest;
@@ -356,10 +443,18 @@ class LoanController extends GetxController {
     }
   }
 
-  // Calculate early repayment interest for a loan
+  // Calculate early repayment interest for a loan (updated for new rules)
   double calculateEarlyRepaymentInterest(Loan loan) {
     try {
       final daysPassed = loan.daysPassed;
+
+      // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
+      if (loan.duration <= 30) {
+        final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
+        return (loan.amountGiven * loan.interestRate) / 100 * effectiveDays;
+      }
+
+      // Rule 2: For loans longer than 30 days, use actual days passed
       return (loan.amountGiven * loan.interestRate) / 100 * daysPassed;
     } catch (e) {
       print('Error calculating early repayment interest: $e');

@@ -9,37 +9,61 @@ class InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
+  final IconData? icon;
+  final bool isAmount;
 
   const InfoRow({
     super.key,
     required this.label,
     required this.value,
     this.color,
+    this.icon,
+    this.isAmount = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (icon != null) ...[
+            Icon(icon, size: 18, color: Colors.grey[600]),
+            const SizedBox(width: 8),
+          ],
           SizedBox(
-            width: 120,
+            width: 140,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey,
+                color: Colors.grey[700],
+                fontSize: 14,
               ),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: color ?? Colors.black87,
+            child: Container(
+              padding: isAmount
+                  ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+                  : EdgeInsets.zero,
+              decoration: isAmount
+                  ? BoxDecoration(
+                      color: (color ?? Colors.blue).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: (color ?? Colors.blue).withOpacity(0.3),
+                      ),
+                    )
+                  : null,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontWeight: isAmount ? FontWeight.bold : FontWeight.w600,
+                  color: color ?? Colors.black87,
+                  fontSize: isAmount ? 15 : 14,
+                ),
               ),
             ),
           ),
@@ -52,30 +76,111 @@ class InfoRow extends StatelessWidget {
 class InfoCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
+  final IconData? titleIcon;
+  final Color? titleColor;
 
-  const InfoCard({super.key, required this.title, required this.children});
+  const InfoCard({
+    super.key,
+    required this.title,
+    required this.children,
+    this.titleIcon,
+    this.titleColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
+      elevation: 3,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white, Colors.grey[50]!],
+          ),
         ),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (titleIcon != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (titleColor ?? Colors.blue).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        titleIcon,
+                        color: titleColor ?? Colors.blue,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor ?? Colors.blue[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...children,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class StatusBadge extends StatelessWidget {
+  final String text;
+  final Color color;
+  final IconData icon;
+
+  const StatusBadge({
+    super.key,
+    required this.text,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -93,9 +198,13 @@ class LoanDetailPage extends StatefulWidget {
 class _LoanDetailPageState extends State<LoanDetailPage> {
   final TextEditingController _receivedAmountController =
       TextEditingController();
+  final TextEditingController _partialRepaymentAmountController =
+      TextEditingController();
   final LoanController _loanController = Get.find<LoanController>();
   Timer? _updateTimer;
   bool _isEarlyRepaymentEnabled = false;
+  DateTime _selectedRepaymentDate = DateTime.now();
+  bool _isProcessingAction = false; // Prevent multiple simultaneous actions
 
   @override
   void initState() {
@@ -115,28 +224,23 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   @override
   void dispose() {
     _receivedAmountController.dispose();
+    _partialRepaymentAmountController.dispose();
     _updateTimer?.cancel();
     super.dispose();
   }
 
-  // Calculate early repayment amount
+  // Calculate early repayment amount (updated for new rules)
   double get _earlyRepaymentAmount {
     if (!_isEarlyRepaymentEnabled) return widget.loan.immediateTotalDue;
 
-    final daysPassed = widget.loan.daysPassed;
-    final actualInterest =
-        (widget.loan.amountGiven * widget.loan.interestRate) / 100 * daysPassed;
-    return widget.loan.amountGiven + actualInterest;
+    return _loanController.calculateEarlyRepaymentAmount(widget.loan);
   }
 
-  // Calculate early repayment interest
+  // Calculate early repayment interest (updated for new rules)
   double get _earlyRepaymentInterest {
     if (!_isEarlyRepaymentEnabled) return widget.loan.agreedPeriodInterest;
 
-    final daysPassed = widget.loan.daysPassed;
-    return (widget.loan.amountGiven * widget.loan.interestRate) /
-        100 *
-        daysPassed;
+    return _loanController.calculateEarlyRepaymentInterest(widget.loan);
   }
 
   // Calculate early repayment due amount
@@ -145,10 +249,12 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   }
 
   void _updateReceivedAmount() {
+    if (_isProcessingAction) return; // Prevent multiple simultaneous actions
+
     final newAmount = double.tryParse(_receivedAmountController.text) ?? 0.0;
 
     if (newAmount < 0) {
-      Get.snackbar(
+      _showSnackbar(
         'Error',
         'Received amount cannot be negative',
         backgroundColor: Colors.red,
@@ -157,393 +263,761 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
       return;
     }
 
-    _loanController.updateReceivedAmountBySerial(
-      widget.loan.serialNumber,
-      newAmount,
-    );
-
-    // Update the local loan object
     setState(() {
-      widget.loan.amountReceived = newAmount;
+      _isProcessingAction = true;
     });
 
-    // Refresh loan calculations
-    _loanController.refreshLoanCalculations();
+    try {
+      _loanController.updateReceivedAmountBySerial(
+        widget.loan.serialNumber,
+        newAmount,
+      );
 
-    Get.snackbar(
-      'Success',
-      'Received amount updated successfully',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
+      // Update the local loan object
+      setState(() {
+        widget.loan.amountReceived = newAmount;
+      });
+
+      // Refresh loan calculations
+      _loanController.refreshLoanCalculations();
+
+      _showSnackbar(
+        'Success',
+        'Received amount updated successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } finally {
+      setState(() {
+        _isProcessingAction = false;
+      });
+    }
+  }
+
+  // Helper method to safely show snackbars
+  void _showSnackbar(
+    String title,
+    String message, {
+    Color? backgroundColor,
+    Color? colorText,
+  }) {
+    try {
+      // Close any existing snackbars first
+      if (Get.isSnackbarOpen) {
+        Get.closeCurrentSnackbar();
+      }
+
+      // Add a small delay to ensure proper cleanup
+      Future.delayed(const Duration(milliseconds: 100), () {
+        Get.snackbar(
+          title,
+          message,
+          backgroundColor: backgroundColor,
+          colorText: colorText,
+          duration: const Duration(seconds: 3),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      });
+    } catch (e) {
+      print('Error showing snackbar: $e');
+    }
+  }
+
+  void _addPartialRepayment() {
+    if (_isProcessingAction) return; // Prevent multiple simultaneous actions
+
+    final amount =
+        double.tryParse(_partialRepaymentAmountController.text) ?? 0.0;
+
+    if (amount <= 0) {
+      _showSnackbar(
+        'Error',
+        'Repayment amount must be greater than 0',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    if (amount > widget.loan.currentBalance) {
+      _showSnackbar(
+        'Error',
+        'Repayment amount cannot exceed remaining balance',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessingAction = true;
+    });
+
+    try {
+      _loanController.addPartialRepayment(
+        widget.loan.serialNumber,
+        amount,
+        _selectedRepaymentDate,
+      );
+
+      // Clear the input field
+      _partialRepaymentAmountController.clear();
+
+      // Refresh the page
+      setState(() {});
+
+      _showSnackbar(
+        'Success',
+        'Partial repayment added successfully',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } finally {
+      setState(() {
+        _isProcessingAction = false;
+      });
+    }
+  }
+
+  Future<void> _selectRepaymentDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedRepaymentDate,
+      firstDate: widget.loan.date,
+      lastDate: DateTime.now(),
     );
+    if (picked != null && picked != _selectedRepaymentDate) {
+      setState(() {
+        _selectedRepaymentDate = picked;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 768;
+    final maxWidth = isDesktop ? 1000.0 : double.infinity;
+
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Loan Details - ${widget.loan.name}'),
-        backgroundColor: Colors.blue,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.loan.name,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            Text(
+              'Serial: ${widget.loan.serialNumber}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete, color: Colors.white),
+            icon: const Icon(Icons.delete_outline, color: Colors.white),
             onPressed: _showDeleteConfirmation,
             tooltip: 'Delete Loan',
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InfoCard(
-              title: 'Personal Information',
+      body: Center(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InfoRow(label: 'Name', value: widget.loan.name),
-                InfoRow(label: 'Phone', value: widget.loan.phone),
-                InfoRow(label: 'Address', value: widget.loan.address),
+                // Status Header
+                _buildStatusHeader(),
+
+                if (isDesktop) _buildDesktopLayout() else _buildMobileLayout(),
               ],
             ),
-            const SizedBox(height: 16),
-            InfoCard(
-              title: 'Loan Information',
-              children: [
-                InfoRow(
-                  label: 'Loan Date',
-                  value: _formatDate(widget.loan.date),
-                ),
-                InfoRow(
-                  label: 'Duration',
-                  value: '${widget.loan.duration} days',
-                ),
-                InfoRow(
-                  label: 'Interest Rate',
-                  value: '${widget.loan.interestRate}%',
-                ),
-                InfoRow(
-                  label: 'Loan Amount',
-                  value: 'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
-                ),
-                InfoRow(
-                  label: 'Due Date',
-                  value: _formatDate(
-                    widget.loan.date.add(Duration(days: widget.loan.duration)),
-                  ),
-                ),
-                InfoRow(
-                  label: 'Days Remaining',
-                  value: '${widget.loan.daysRemaining} days',
-                  color: widget.loan.daysRemaining < 0
-                      ? Colors.red
-                      : Colors.green,
-                ),
-                if (widget.loan.isOverdue)
-                  InfoRow(
-                    label: 'Overdue Days',
-                    value: '${widget.loan.overdueDays} days',
-                    color: Colors.red,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            InfoCard(
-              title: 'Jewellery Information',
-              children: [
-                InfoRow(label: 'Type', value: widget.loan.type),
-                InfoRow(
-                  label: 'Jewellery Name',
-                  value: widget.loan.jewelleryName,
-                ),
-                InfoRow(
-                  label: 'Serial Number',
-                  value: widget.loan.serialNumber,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            InfoCard(
-              title: 'Financial Summary',
-              children: [
-                InfoRow(
-                  label: 'Principal Amount',
-                  value: 'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
-                ),
-                InfoRow(
-                  label: 'Interest Rate',
-                  value: '${widget.loan.interestRate}% daily',
-                ),
-                InfoRow(
-                  label: 'Duration',
-                  value: '${widget.loan.duration} days',
-                ),
-                InfoRow(
-                  label: 'Days Passed',
-                  value: '${widget.loan.daysPassed} days',
-                ),
-                InfoRow(
-                  label: 'Due Date',
-                  value: _formatDate(widget.loan.dueDate),
-                ),
-                if (widget.loan.daysPassed <= widget.loan.duration) ...[
-                  InfoRow(
-                    label: 'Days Remaining',
-                    value: '${widget.loan.daysRemaining} days',
-                    color: widget.loan.daysRemaining > 0
-                        ? Colors.green
-                        : Colors.red,
-                  ),
-                ] else ...[
-                  InfoRow(
-                    label: 'Overdue Days',
-                    value: '${widget.loan.overdueDays} days',
-                    color: Colors.red,
-                  ),
-                ],
-                const Divider(),
-                InfoRow(
-                  label: 'Full Interest (Fixed)',
-                  value:
-                      'NPR ${widget.loan.agreedPeriodInterest.toStringAsFixed(2)}',
-                  color: Colors.orange,
-                ),
-                InfoRow(
-                  label: 'Total Due (Principal + Full Interest)',
-                  value:
-                      'NPR ${widget.loan.immediateTotalDue.toStringAsFixed(2)}',
-                  color: Colors.blue,
-                ),
-                if (_isEarlyRepaymentEnabled &&
-                    widget.loan.daysPassed < widget.loan.duration) ...[
-                  const Divider(),
-                  InfoRow(
-                    label: 'Early Repayment Interest',
-                    value: 'NPR ${_earlyRepaymentInterest.toStringAsFixed(2)}',
-                    color: Colors.green,
-                  ),
-                  InfoRow(
-                    label: 'Early Repayment Total',
-                    value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
-                    color: Colors.green,
-                  ),
-                  const Divider(),
-                ],
-                if (widget.loan.isOverdue) ...[
-                  InfoRow(
-                    label: 'Additional Overdue Interest',
-                    value:
-                        'NPR ${widget.loan.overdueInterest.toStringAsFixed(2)}',
-                    color: Colors.red,
-                  ),
-                  InfoRow(
-                    label: 'Total Interest (Including Overdue)',
-                    value:
-                        'NPR ${widget.loan.currentInterest.toStringAsFixed(2)}',
-                    color: Colors.orange,
-                  ),
-                ],
-                const Divider(),
-                InfoRow(
-                  label: 'Amount Received',
-                  value: 'NPR ${widget.loan.amountReceived.toStringAsFixed(2)}',
-                  color: Colors.green,
-                ),
-                InfoRow(
-                  label: 'Remaining Amount',
-                  value:
-                      _isEarlyRepaymentEnabled &&
-                          widget.loan.daysPassed < widget.loan.duration
-                      ? 'NPR ${(_earlyRepaymentAmount - widget.loan.amountReceived).toStringAsFixed(2)}'
-                      : 'NPR ${(widget.loan.immediateTotalDue - widget.loan.amountReceived).toStringAsFixed(2)}',
-                ),
-                const Divider(),
-                InfoRow(
-                  label: 'Total Due',
-                  value:
-                      _isEarlyRepaymentEnabled &&
-                          widget.loan.daysPassed < widget.loan.duration
-                      ? 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}'
-                      : 'NPR ${widget.loan.dueAmount.toStringAsFixed(2)}',
-                  color:
-                      _isEarlyRepaymentEnabled &&
-                          widget.loan.daysPassed < widget.loan.duration
-                      ? (_earlyRepaymentDueAmount > 0
-                            ? Colors.red
-                            : Colors.green)
-                      : (widget.loan.dueAmount > 0 ? Colors.red : Colors.green),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info, color: Colors.blue, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'LOAN TERMS',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        _isEarlyRepaymentEnabled &&
-                                widget.loan.daysPassed < widget.loan.duration
-                            ? 'Early repayment enabled: Customer pays interest only for actual days (${widget.loan.daysPassed} days). '
-                                  'Total due: NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}'
-                            : 'Full interest is calculated and added to principal immediately when loan is given. '
-                                  'Customer must pay the full amount (Principal + Full Interest) regardless of early payment.',
-                        style: TextStyle(color: Colors.blue, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.loan.isFullyPaid) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'FULLY PAID',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else if (widget.loan.isOverdue) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.warning, color: Colors.red, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              '⚠️ OVERDUE NOTICE',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'This loan is ${widget.loan.overdueDays} days overdue. '
-                          'Additional interest of NPR ${widget.loan.overdueInterest.toStringAsFixed(2)} has been added to the total due amount.',
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (widget.loan.description.isNotEmpty) ...[
-              InfoCard(
-                title: 'Description',
-                children: [InfoRow(label: '', value: widget.loan.description)],
-              ),
-              const SizedBox(height: 16),
-            ],
-            _buildCustomerSummaryCard(),
-            const SizedBox(height: 16),
-            _buildUpdateReceivedAmountCard(),
-            const SizedBox(height: 16),
-            _buildEarlyRepaymentCard(),
-            const SizedBox(height: 16),
-            _buildAdditionalLoanCard(),
-            const SizedBox(height: 16),
-            _buildDeleteLoanCard(),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildUpdateReceivedAmountCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Update Received Amount',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _receivedAmountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Received Amount (NPR)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.money),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _updateReceivedAmount,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: const Text(
-                  'Update Received Amount',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
-          ],
+  Widget _buildStatusHeader() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    'Principal Amount',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'NPR ${(_isEarlyRepaymentEnabled && widget.loan.daysPassed < widget.loan.duration ? _earlyRepaymentDueAmount : widget.loan.dueAmount).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color:
+                          (_isEarlyRepaymentEnabled &&
+                                      widget.loan.daysPassed <
+                                          widget.loan.duration
+                                  ? _earlyRepaymentDueAmount
+                                  : widget.loan.dueAmount) >
+                              0
+                          ? Colors.red[300]
+                          : Colors.green[300],
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    'Amount Due',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              if (widget.loan.isFullyPaid)
+                StatusBadge(
+                  text: 'FULLY PAID',
+                  color: Colors.green[300]!,
+                  icon: Icons.check_circle,
+                )
+              else if (widget.loan.isOverdue)
+                StatusBadge(
+                  text: '${widget.loan.overdueDays} DAYS OVERDUE',
+                  color: Colors.red[300]!,
+                  icon: Icons.warning,
+                )
+              else
+                StatusBadge(
+                  text: '${widget.loan.daysRemaining} DAYS LEFT',
+                  color: Colors.orange[300]!,
+                  icon: Icons.schedule,
+                ),
+              StatusBadge(
+                text: '${widget.loan.interestRate}% DAILY',
+                color: Colors.purple[300]!,
+                icon: Icons.percent,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: Column(
+            children: [
+              _buildPersonalInfoCard(),
+              _buildLoanInfoCard(),
+              _buildJewelleryInfoCard(),
+              if (widget.loan.description.isNotEmpty) _buildDescriptionCard(),
+            ],
+          ),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              _buildFinancialSummaryCard(),
+              _buildCustomerSummaryCard(),
+              _buildUpdateReceivedAmountCard(),
+              _buildPartialRepaymentCard(),
+              _buildEarlyRepaymentCard(),
+              _buildAdditionalLoanCard(),
+              _buildDeleteLoanCard(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return Column(
+      children: [
+        _buildPersonalInfoCard(),
+        _buildLoanInfoCard(),
+        _buildJewelleryInfoCard(),
+        _buildFinancialSummaryCard(),
+        if (widget.loan.description.isNotEmpty) _buildDescriptionCard(),
+        _buildCustomerSummaryCard(),
+        _buildUpdateReceivedAmountCard(),
+        _buildPartialRepaymentCard(),
+        _buildEarlyRepaymentCard(),
+        _buildAdditionalLoanCard(),
+        _buildDeleteLoanCard(),
+      ],
+    );
+  }
+
+  Widget _buildPersonalInfoCard() {
+    return InfoCard(
+      title: 'Personal Information',
+      titleIcon: Icons.person,
+      titleColor: Colors.blue[700],
+      children: [
+        InfoRow(
+          label: 'Name',
+          value: widget.loan.name,
+          icon: Icons.person_outline,
+        ),
+        InfoRow(
+          label: 'Phone',
+          value: widget.loan.phone,
+          icon: Icons.phone_outlined,
+        ),
+        InfoRow(
+          label: 'Address',
+          value: widget.loan.address,
+          icon: Icons.location_on_outlined,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoanInfoCard() {
+    return InfoCard(
+      title: 'Loan Information',
+      titleIcon: Icons.receipt_long,
+      titleColor: Colors.green[700],
+      children: [
+        InfoRow(
+          label: 'Loan Date',
+          value: _formatDate(widget.loan.date),
+          icon: Icons.calendar_today,
+        ),
+        InfoRow(
+          label: 'Duration',
+          value: '${widget.loan.duration} days',
+          icon: Icons.schedule,
+        ),
+        InfoRow(
+          label: 'Interest Rate',
+          value: '${widget.loan.interestRate}%',
+          icon: Icons.percent,
+        ),
+        InfoRow(
+          label: 'Due Date',
+          value: _formatDate(
+            widget.loan.date.add(Duration(days: widget.loan.duration)),
+          ),
+          icon: Icons.event,
+        ),
+        InfoRow(
+          label: 'Days Passed',
+          value: '${widget.loan.daysPassed} days',
+          icon: Icons.timelapse,
+        ),
+        if (widget.loan.isOverdue)
+          InfoRow(
+            label: 'Overdue Days',
+            value: '${widget.loan.overdueDays} days',
+            color: Colors.red,
+            icon: Icons.warning,
+          )
+        else
+          InfoRow(
+            label: 'Days Remaining',
+            value: '${widget.loan.daysRemaining} days',
+            color: widget.loan.daysRemaining > 0 ? Colors.green : Colors.red,
+            icon: Icons.schedule,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildJewelleryInfoCard() {
+    return InfoCard(
+      title: 'Collateral Information',
+      titleIcon: Icons.diamond,
+      titleColor: Colors.orange[700],
+      children: [
+        InfoRow(label: 'Type', value: widget.loan.type, icon: Icons.category),
+        InfoRow(
+          label: 'Jewellery Name',
+          value: widget.loan.jewelleryName,
+          icon: Icons.diamond_outlined,
+        ),
+        InfoRow(
+          label: 'Serial Number',
+          value: widget.loan.serialNumber,
+          icon: Icons.qr_code,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFinancialSummaryCard() {
+    return InfoCard(
+      title: 'Financial Summary',
+      titleIcon: Icons.account_balance_wallet,
+      titleColor: Colors.purple[700],
+      children: [
+        InfoRow(
+          label: 'Principal Amount',
+          value: 'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
+          color: Colors.blue[700],
+          icon: Icons.attach_money,
+          isAmount: true,
+        ),
+        InfoRow(
+          label: 'Full Interest',
+          value: 'NPR ${widget.loan.agreedPeriodInterest.toStringAsFixed(2)}',
+          color: Colors.orange[700],
+          icon: Icons.trending_up,
+          isAmount: true,
+        ),
+        InfoRow(
+          label: 'Total Due (P+I)',
+          value: 'NPR ${widget.loan.immediateTotalDue.toStringAsFixed(2)}',
+          color: Colors.blue[700],
+          icon: Icons.calculate,
+          isAmount: true,
+        ),
+
+        if (_isEarlyRepaymentEnabled &&
+            widget.loan.daysPassed < widget.loan.duration) ...[
+          const Divider(height: 20),
+          InfoRow(
+            label: 'Early Interest',
+            value: 'NPR ${_earlyRepaymentInterest.toStringAsFixed(2)}',
+            color: Colors.green[700],
+            icon: Icons.trending_down,
+            isAmount: true,
+          ),
+          InfoRow(
+            label: 'Early Total',
+            value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
+            color: Colors.green[700],
+            icon: Icons.calculate,
+            isAmount: true,
+          ),
+        ],
+
+        if (widget.loan.isOverdue) ...[
+          const Divider(height: 20),
+          InfoRow(
+            label: 'Overdue Interest',
+            value: 'NPR ${widget.loan.overdueInterest.toStringAsFixed(2)}',
+            color: Colors.red[700],
+            icon: Icons.warning,
+            isAmount: true,
+          ),
+          InfoRow(
+            label: 'Total Interest',
+            value: 'NPR ${widget.loan.currentInterest.toStringAsFixed(2)}',
+            color: Colors.orange[700],
+            icon: Icons.trending_up,
+            isAmount: true,
+          ),
+        ],
+
+        const Divider(height: 20),
+        InfoRow(
+          label: 'Amount Received',
+          value: 'NPR ${widget.loan.amountReceived.toStringAsFixed(2)}',
+          color: Colors.green[700],
+          icon: Icons.payment,
+          isAmount: true,
+        ),
+        InfoRow(
+          label: 'Amount Due',
+          value:
+              _isEarlyRepaymentEnabled &&
+                  widget.loan.daysPassed < widget.loan.duration
+              ? 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}'
+              : 'NPR ${widget.loan.dueAmount.toStringAsFixed(2)}',
+          color:
+              (_isEarlyRepaymentEnabled &&
+                          widget.loan.daysPassed < widget.loan.duration
+                      ? _earlyRepaymentDueAmount
+                      : widget.loan.dueAmount) >
+                  0
+              ? Colors.red[700]
+              : Colors.green[700],
+          icon: Icons.account_balance,
+          isAmount: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDescriptionCard() {
+    return InfoCard(
+      title: 'Description',
+      titleIcon: Icons.notes,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Text(
+            widget.loan.description,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUpdateReceivedAmountCard() {
+    return InfoCard(
+      title: 'Update Received Amount',
+      titleIcon: Icons.edit,
+      titleColor: Colors.green[700],
+      children: [
+        TextField(
+          controller: _receivedAmountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Received Amount (NPR)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.attach_money),
+            filled: true,
+            fillColor: Colors.grey[50],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isProcessingAction ? null : _updateReceivedAmount,
+            icon: _isProcessingAction
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.update),
+            label: Text(_isProcessingAction ? 'Updating...' : 'Update Amount'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPartialRepaymentCard() {
+    final partialRepayments = _loanController.getPartialRepayments(
+      widget.loan.serialNumber,
+    );
+
+    return InfoCard(
+      title: 'Partial Repayments',
+      titleIcon: Icons.payment,
+      titleColor: Colors.purple[700],
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.purple[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.account_balance, color: Colors.purple[700]),
+              const SizedBox(width: 8),
+              Text(
+                'Current Balance: NPR ${widget.loan.currentBalance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: Colors.purple[700],
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _partialRepaymentAmountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Repayment Amount (NPR)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.payment),
+            filled: true,
+            fillColor: Colors.grey[50],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Date: ${_formatDate(_selectedRepaymentDate)}',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _selectRepaymentDate,
+                icon: const Icon(Icons.edit_calendar),
+                label: const Text('Change'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isProcessingAction ? null : _addPartialRepayment,
+            icon: _isProcessingAction
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_circle_outline),
+            label: Text(
+              _isProcessingAction ? 'Processing...' : 'Add Repayment',
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        if (partialRepayments.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Divider(),
+          Row(
+            children: [
+              Icon(Icons.history, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Text(
+                'Repayment History',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...partialRepayments
+              .map(
+                (repayment) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green[200]!),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green[700],
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(repayment.date),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'NPR ${repayment.amount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ],
+      ],
     );
   }
 
@@ -552,48 +1026,50 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   }
 
   Widget _buildAdditionalLoanCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Additional Loan',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Give additional loan to this customer',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Get.to(
-                  () => AddAdditionalLoanPage(existingLoan: widget.loan),
-                ),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text(
-                  'Give Additional Loan',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+    return InfoCard(
+      title: 'Additional Loan',
+      titleIcon: Icons.add_circle,
+      titleColor: Colors.orange[700],
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange[700]),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Give additional loan to this customer with same collateral',
+                  style: TextStyle(fontSize: 14),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () =>
+                Get.to(() => AddAdditionalLoanPage(existingLoan: widget.loan)),
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('Give Additional Loan'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -621,248 +1097,466 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
       widget.loan.name,
     );
 
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return InfoCard(
+      title: 'Customer Summary - ${widget.loan.name}',
+      titleIcon: Icons.person_pin,
+      titleColor: Colors.indigo[700],
+      children: [
+        if (isOverdue)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red[300]!),
+            ),
+            child: Row(
               children: [
+                Icon(Icons.warning, color: Colors.red[700]),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Customer Summary - ${widget.loan.name}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                    'Customer has overdue loans! Total overdue: $totalOverdueDays days',
+                    style: TextStyle(
+                      color: Colors.red[700],
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                if (isOverdue)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'OVERDUE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
               ],
             ),
-            const SizedBox(height: 12),
-            InfoRow(
-              label: 'Total Loans',
-              value: customerLoans.length.toString(),
-            ),
-            InfoRow(
-              label: 'Total Given',
-              value: 'NPR ${totalAmountGiven.toStringAsFixed(2)}',
-            ),
-            InfoRow(
-              label: 'Total Received',
-              value: 'NPR ${totalAmountReceived.toStringAsFixed(2)}',
-            ),
-            InfoRow(
-              label: 'Total Interest',
-              value: 'NPR ${totalCompoundInterest.toStringAsFixed(2)}',
-            ),
-            if (totalOverdueInterest > 0)
-              InfoRow(
-                label: 'Overdue Interest',
-                value: 'NPR ${totalOverdueInterest.toStringAsFixed(2)}',
-                color: Colors.red,
+          ),
+
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryItem(
+                'Total Loans',
+                customerLoans.length.toString(),
+                Icons.receipt_long,
+                Colors.blue,
               ),
-            InfoRow(
-              label: 'Total Due',
-              value: 'NPR ${totalDueAmount.toStringAsFixed(2)}',
-              color: totalDueAmount > 0 ? Colors.red : Colors.green,
             ),
-            if (isOverdue)
-              InfoRow(
-                label: 'Total Overdue Days',
-                value: '$totalOverdueDays days',
-                color: Colors.red,
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryItem(
+                'Total Given',
+                'NPR ${totalAmountGiven.toStringAsFixed(0)}',
+                Icons.trending_up,
+                Colors.green,
               ),
-            if (customerLoans.length > 1) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'All Loans:',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryItem(
+                'Total Received',
+                'NPR ${totalAmountReceived.toStringAsFixed(0)}',
+                Icons.payment,
+                Colors.purple,
               ),
-              const SizedBox(height: 8),
-              ...customerLoans
-                  .map(
-                    (loan) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Row(
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryItem(
+                'Total Due',
+                'NPR ${totalDueAmount.toStringAsFixed(0)}',
+                Icons.account_balance,
+                totalDueAmount > 0 ? Colors.red : Colors.green,
+              ),
+            ),
+          ],
+        ),
+
+        if (customerLoans.length > 1) ...[
+          const SizedBox(height: 20),
+          const Divider(),
+          Row(
+            children: [
+              Icon(Icons.list, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Text(
+                'All Loans (${customerLoans.length})',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...customerLoans
+              .map(
+                (loan) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: loan.serialNumber == widget.loan.serialNumber
+                        ? Colors.blue[50]
+                        : Colors.grey[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: loan.serialNumber == widget.loan.serialNumber
+                          ? Colors.blue[300]!
+                          : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${loan.type} - ${loan.jewelleryName} (${loan.serialNumber})',
-                                  style: const TextStyle(fontSize: 14),
+                            child: Text(
+                              '${loan.type} - ${loan.jewelleryName}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (loan.serialNumber == widget.loan.serialNumber)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[700],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Text(
+                                'CURRENT',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                Text(
-                                  '${loan.interestRate}% - ${loan.duration} days',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${loan.interestRate}% • ${loan.duration} days • ${loan.serialNumber}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                'NPR ${loan.amountGiven.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (loan.isOverdue) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${loan.overdueDays}d',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'NPR ${loan.amountGiven.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (loan.isOverdue)
-                                Text(
-                                  '${loan.overdueDays} days overdue',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                             ],
                           ),
                         ],
                       ),
-                    ),
-                  )
-                  .toList(),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSummaryItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
             ],
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildEarlyRepaymentCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Early Repayment',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 16),
-            SwitchListTile(
-              title: const Text('Enable Early Repayment Calculation'),
-              value: _isEarlyRepaymentEnabled,
-              onChanged: (bool value) {
-                setState(() {
-                  _isEarlyRepaymentEnabled = value;
-                });
-              },
-            ),
-            if (_isEarlyRepaymentEnabled) ...[
-              const SizedBox(height: 16),
-              InfoRow(
-                label: 'Early Repayment Amount',
-                value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
-              ),
-              InfoRow(
-                label: 'Early Repayment Interest',
-                value: 'NPR ${_earlyRepaymentInterest.toStringAsFixed(2)}',
-              ),
-              InfoRow(
-                label: 'Early Repayment Due Amount',
-                value: 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}',
+    return InfoCard(
+      title: 'Early Repayment Calculator',
+      titleIcon: Icons.calculate,
+      titleColor: Colors.teal[700],
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.teal[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.teal[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.teal[700]),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Enable to calculate repayment based on actual days instead of full term',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ],
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: SwitchListTile(
+            title: const Text(
+              'Enable Early Repayment Calculation',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              _isEarlyRepaymentEnabled
+                  ? 'Interest calculated for ${widget.loan.daysPassed} days only'
+                  : 'Full interest applies regardless of early payment',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            value: _isEarlyRepaymentEnabled,
+            onChanged: (bool value) {
+              setState(() {
+                _isEarlyRepaymentEnabled = value;
+              });
+            },
+            activeColor: Colors.teal[700],
+          ),
+        ),
+        if (_isEarlyRepaymentEnabled &&
+            widget.loan.daysPassed < widget.loan.duration) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green[300]!),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.savings, color: Colors.green[700]),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Early Repayment Benefits',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                InfoRow(
+                  label: 'Days Used',
+                  value:
+                      '${widget.loan.daysPassed} of ${widget.loan.duration} days',
+                  icon: Icons.calendar_today,
+                ),
+                InfoRow(
+                  label: 'Interest Saved',
+                  value:
+                      'NPR ${(widget.loan.agreedPeriodInterest - _earlyRepaymentInterest).toStringAsFixed(2)}',
+                  color: Colors.green[700],
+                  icon: Icons.trending_down,
+                ),
+                InfoRow(
+                  label: 'Total Payable',
+                  value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
+                  color: Colors.green[700],
+                  icon: Icons.calculate,
+                  isAmount: true,
+                ),
+                InfoRow(
+                  label: 'Amount Due',
+                  value: 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}',
+                  color: _earlyRepaymentDueAmount > 0
+                      ? Colors.red[700]
+                      : Colors.green[700],
+                  icon: Icons.account_balance,
+                  isAmount: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
   Widget _buildDeleteLoanCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Delete Loan',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.red,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Permanently delete this loan. This action cannot be undone.',
-              style: TextStyle(color: Colors.red, fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _showDeleteConfirmation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: const Text(
-                  'Delete Loan',
-                  style: TextStyle(fontSize: 16),
+    return InfoCard(
+      title: 'Danger Zone',
+      titleIcon: Icons.warning,
+      titleColor: Colors.red[700],
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.red[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.red[300]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red[700]),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Permanently delete this loan. This action cannot be undone.',
+                  style: TextStyle(fontSize: 14),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _showDeleteConfirmation,
+            icon: const Icon(Icons.delete_forever),
+            label: const Text('Delete Loan'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   void _showDeleteConfirmation() {
     Get.dialog(
       AlertDialog(
-        title: const Text('Confirm Deletion'),
-        content: const Text(
-          'Are you sure you want to delete this loan? This action cannot be undone.',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('Confirm Deletion'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Are you sure you want to delete this loan?',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Loan: ${widget.loan.name} - ${widget.loan.serialNumber}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            Text(
+              'Amount: NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[300]!),
+              ),
+              child: const Text(
+                '⚠️ This action cannot be undone!',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
               _deleteLoan();
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[700],
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -874,7 +1568,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     _loanController.deleteLoanBySerial(widget.loan.serialNumber);
     Get.back(); // Close dialog
     Get.back(); // Navigate back to loan list
-    Get.snackbar(
+    _showSnackbar(
       'Success',
       'Loan deleted successfully',
       backgroundColor: Colors.green,
