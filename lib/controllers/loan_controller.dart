@@ -13,7 +13,10 @@ class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
   final loans = <Loan>[].obs;
   final filteredLoans = <Loan>[].obs;
+  final searchSuggestions = <String>[].obs;
   final isLoading = false.obs;
+  final isSearchActive = false.obs;
+  final hasExplicitSearch = false.obs;
 
   @override
   void onInit() {
@@ -26,6 +29,8 @@ class LoanController extends GetxController {
       isLoading.value = true;
       loans.value = loanBox.values.toList();
       filteredLoans.value = loans;
+      isSearchActive.value = false;
+      hasExplicitSearch.value = false;
     } catch (e) {
       print('Error loading loans: $e');
       _showSnackbar('Error', 'Failed to load loans');
@@ -95,11 +100,7 @@ class LoanController extends GetxController {
   }
 
   // New method to add partial repayment
-  void addPartialRepayment(
-    String serialNumber,
-    double amount,
-    DateTime repaymentDate,
-  ) {
+  void addPartialRepayment(String serialNumber, double amount, DateTime date) {
     try {
       final loanIndex = loans.indexWhere(
         (loan) => loan.serialNumber == serialNumber,
@@ -110,29 +111,10 @@ class LoanController extends GetxController {
       }
 
       final loan = loans[loanIndex];
-
-      // Validate repayment amount
-      if (amount <= 0) {
-        _showSnackbar('Error', 'Repayment amount must be greater than 0');
-        return;
-      }
-
-      if (amount > loan.currentBalance) {
-        _showSnackbar(
-          'Error',
-          'Repayment amount cannot exceed remaining balance',
-        );
-        return;
-      }
-
-      // Add partial repayment
-      loan.addPartialRepayment(amount, repaymentDate);
-
-      // Update the loan in the list
+      loan.addPartialRepayment(amount, date);
+      loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
-
-      _showSnackbar('Success', 'Partial repayment added successfully');
     } catch (e) {
       print('Error adding partial repayment: $e');
       _showSnackbar('Error', 'Failed to add partial repayment');
@@ -161,11 +143,13 @@ class LoanController extends GetxController {
     }
   }
 
-  // Method to get partial repayments for a loan
+  // Get partial repayments for a loan
   List<PartialRepayment> getPartialRepayments(String serialNumber) {
     try {
-      final loan = getLoanBySerial(serialNumber);
-      return loan?.partialRepayments ?? [];
+      final loan = loans.firstWhere(
+        (loan) => loan.serialNumber == serialNumber,
+      );
+      return loan.partialRepayments;
     } catch (e) {
       print('Error getting partial repayments: $e');
       return [];
@@ -176,11 +160,63 @@ class LoanController extends GetxController {
     loadLoans();
   }
 
+  // Generate search suggestions based on query
+  void generateSearchSuggestions(String query) {
+    if (query.isEmpty) {
+      searchSuggestions.clear();
+      return;
+    }
+
+    try {
+      final suggestions = <String>{};
+      final queryLower = query.toLowerCase();
+
+      // Add customer name suggestions
+      for (final loan in loans) {
+        if (loan.name.toLowerCase().contains(queryLower)) {
+          suggestions.add(loan.name);
+        }
+      }
+
+      // Add serial number suggestions
+      for (final loan in loans) {
+        if (loan.serialNumber.toLowerCase().contains(queryLower)) {
+          suggestions.add(loan.serialNumber);
+        }
+      }
+
+      // Add phone number suggestions
+      for (final loan in loans) {
+        if (loan.phone.contains(query)) {
+          suggestions.add(loan.phone);
+        }
+      }
+
+      // Add jewellery name suggestions
+      for (final loan in loans) {
+        if (loan.jewelleryName.toLowerCase().contains(queryLower)) {
+          suggestions.add(loan.jewelleryName);
+        }
+      }
+
+      // Limit suggestions to 10 items and sort
+      searchSuggestions.value = suggestions.take(10).toList()..sort();
+    } catch (e) {
+      print('Error generating search suggestions: $e');
+      searchSuggestions.clear();
+    }
+  }
+
+  // Real-time search with suggestions
   void search(String query) {
     try {
       if (query.isEmpty) {
         filteredLoans.value = loans;
+        isSearchActive.value = false;
+        hasExplicitSearch.value = false;
+        searchSuggestions.clear();
       } else {
+        isSearchActive.value = true;
         final results = loans
             .where(
               (loan) =>
@@ -195,11 +231,28 @@ class LoanController extends GetxController {
             )
             .toList();
         filteredLoans.value = results;
+
+        // Generate suggestions for real-time search
+        generateSearchSuggestions(query);
       }
     } catch (e) {
       print('Error searching loans: $e');
       filteredLoans.value = loans;
     }
+  }
+
+  // Explicit search (when user presses Enter or Search button)
+  void performExplicitSearch(String query) {
+    search(query);
+    hasExplicitSearch.value = true;
+  }
+
+  // Clear search and return to all loans
+  void clearSearch() {
+    filteredLoans.value = loans;
+    isSearchActive.value = false;
+    hasExplicitSearch.value = false;
+    searchSuggestions.clear();
   }
 
   // Get filtered loans for display
@@ -208,8 +261,18 @@ class LoanController extends GetxController {
   }
 
   // Check if search is active
-  bool isSearchActive() {
-    return filteredLoans.length != loans.length;
+  bool getIsSearchActive() {
+    return isSearchActive.value;
+  }
+
+  // Check if we should show "no results" message
+  bool shouldShowNoResults() {
+    return hasExplicitSearch.value && filteredLoans.isEmpty && !isLoading.value;
+  }
+
+  // Check if we should show all loans (no search active)
+  bool shouldShowAllLoans() {
+    return !isSearchActive.value && !hasExplicitSearch.value;
   }
 
   void deleteLoanBySerial(String serialNumber) {

@@ -23,6 +23,9 @@ class InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
       child: Row(
@@ -33,13 +36,13 @@ class InfoRow extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           SizedBox(
-            width: 140,
+            width: isMobile ? 100 : 140,
             child: Text(
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 color: Colors.grey[700],
-                fontSize: 14,
+                fontSize: isMobile ? 12 : 14,
               ),
             ),
           ),
@@ -62,8 +65,12 @@ class InfoRow extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: isAmount ? FontWeight.bold : FontWeight.w600,
                   color: color ?? Colors.black87,
-                  fontSize: isAmount ? 15 : 14,
+                  fontSize: isAmount
+                      ? (isMobile ? 13 : 15)
+                      : (isMobile ? 12 : 14),
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
             ),
           ),
@@ -89,6 +96,9 @@ class InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Card(
       elevation: 3,
       margin: const EdgeInsets.only(bottom: 16),
@@ -103,7 +113,7 @@ class InfoCard extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(isMobile ? 16.0 : 20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -119,7 +129,7 @@ class InfoCard extends StatelessWidget {
                       child: Icon(
                         titleIcon,
                         color: titleColor ?? Colors.blue,
-                        size: 20,
+                        size: isMobile ? 18 : 20,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -128,7 +138,7 @@ class InfoCard extends StatelessWidget {
                     child: Text(
                       title,
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: isMobile ? 16 : 18,
                         fontWeight: FontWeight.bold,
                         color: titleColor ?? Colors.blue[700],
                       ),
@@ -160,8 +170,14 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 12,
+        vertical: isMobile ? 4 : 6,
+      ),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
@@ -170,13 +186,13 @@ class StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
+          Icon(icon, color: color, size: isMobile ? 14 : 16),
+          SizedBox(width: isMobile ? 4 : 6),
           Text(
             text,
             style: TextStyle(
               color: color,
-              fontSize: 12,
+              fontSize: isMobile ? 10 : 12,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -202,8 +218,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
       TextEditingController();
   final LoanController _loanController = Get.find<LoanController>();
   Timer? _updateTimer;
-  bool _isEarlyRepaymentEnabled = false;
-  DateTime _selectedRepaymentDate = DateTime.now();
   bool _isProcessingAction = false; // Prevent multiple simultaneous actions
 
   @override
@@ -227,25 +241,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     _partialRepaymentAmountController.dispose();
     _updateTimer?.cancel();
     super.dispose();
-  }
-
-  // Calculate early repayment amount (updated for new rules)
-  double get _earlyRepaymentAmount {
-    if (!_isEarlyRepaymentEnabled) return widget.loan.immediateTotalDue;
-
-    return _loanController.calculateEarlyRepaymentAmount(widget.loan);
-  }
-
-  // Calculate early repayment interest (updated for new rules)
-  double get _earlyRepaymentInterest {
-    if (!_isEarlyRepaymentEnabled) return widget.loan.agreedPeriodInterest;
-
-    return _loanController.calculateEarlyRepaymentInterest(widget.loan);
-  }
-
-  // Calculate early repayment due amount
-  double get _earlyRepaymentDueAmount {
-    return _earlyRepaymentAmount - widget.loan.amountReceived;
   }
 
   void _updateReceivedAmount() {
@@ -357,7 +352,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
       _loanController.addPartialRepayment(
         widget.loan.serialNumber,
         amount,
-        _selectedRepaymentDate,
+        DateTime.now(),
       );
 
       // Clear the input field
@@ -375,20 +370,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     } finally {
       setState(() {
         _isProcessingAction = false;
-      });
-    }
-  }
-
-  Future<void> _selectRepaymentDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedRepaymentDate,
-      firstDate: widget.loan.date,
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && picked != _selectedRepaymentDate) {
-      setState(() {
-        _selectedRepaymentDate = picked;
       });
     }
   }
@@ -450,9 +431,12 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   }
 
   Widget _buildStatusHeader() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [Colors.blue[700]!, Colors.blue[500]!],
@@ -473,53 +457,52 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'NPR ${widget.loan.amountGiven.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isMobile ? 22 : 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const Text(
-                    'Principal Amount',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ],
+                    const Text(
+                      'Principal Amount',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'NPR ${(_isEarlyRepaymentEnabled && widget.loan.daysPassed < widget.loan.duration ? _earlyRepaymentDueAmount : widget.loan.dueAmount).toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color:
-                          (_isEarlyRepaymentEnabled &&
-                                      widget.loan.daysPassed <
-                                          widget.loan.duration
-                                  ? _earlyRepaymentDueAmount
-                                  : widget.loan.dueAmount) >
-                              0
-                          ? Colors.red[300]
-                          : Colors.green[300],
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'NPR ${widget.loan.dueAmount.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: widget.loan.dueAmount > 0
+                            ? Colors.red[300]
+                            : Colors.green[300],
+                        fontSize: isMobile ? 18 : 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const Text(
-                    'Amount Due',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ],
+                    const Text(
+                      'Amount Due',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               if (widget.loan.isFullyPaid)
                 StatusBadge(
@@ -575,7 +558,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               _buildCustomerSummaryCard(),
               _buildUpdateReceivedAmountCard(),
               _buildPartialRepaymentCard(),
-              _buildEarlyRepaymentCard(),
               _buildAdditionalLoanCard(),
               _buildDeleteLoanCard(),
             ],
@@ -596,7 +578,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         _buildCustomerSummaryCard(),
         _buildUpdateReceivedAmountCard(),
         _buildPartialRepaymentCard(),
-        _buildEarlyRepaymentCard(),
         _buildAdditionalLoanCard(),
         _buildDeleteLoanCard(),
       ],
@@ -728,25 +709,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           isAmount: true,
         ),
 
-        if (_isEarlyRepaymentEnabled &&
-            widget.loan.daysPassed < widget.loan.duration) ...[
-          const Divider(height: 20),
-          InfoRow(
-            label: 'Early Interest',
-            value: 'NPR ${_earlyRepaymentInterest.toStringAsFixed(2)}',
-            color: Colors.green[700],
-            icon: Icons.trending_down,
-            isAmount: true,
-          ),
-          InfoRow(
-            label: 'Early Total',
-            value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
-            color: Colors.green[700],
-            icon: Icons.calculate,
-            isAmount: true,
-          ),
-        ],
-
         if (widget.loan.isOverdue) ...[
           const Divider(height: 20),
           InfoRow(
@@ -775,17 +737,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         ),
         InfoRow(
           label: 'Amount Due',
-          value:
-              _isEarlyRepaymentEnabled &&
-                  widget.loan.daysPassed < widget.loan.duration
-              ? 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}'
-              : 'NPR ${widget.loan.dueAmount.toStringAsFixed(2)}',
-          color:
-              (_isEarlyRepaymentEnabled &&
-                          widget.loan.daysPassed < widget.loan.duration
-                      ? _earlyRepaymentDueAmount
-                      : widget.loan.dueAmount) >
-                  0
+          value: 'NPR ${widget.loan.dueAmount.toStringAsFixed(2)}',
+          color: widget.loan.dueAmount > 0
               ? Colors.red[700]
               : Colors.green[700],
           icon: Icons.account_balance,
@@ -918,12 +871,24 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Date: ${_formatDate(_selectedRepaymentDate)}',
+                  'Date: ${_formatDate(DateTime.now())}',
                   style: const TextStyle(fontSize: 16),
                 ),
               ),
               TextButton.icon(
-                onPressed: _selectRepaymentDate,
+                onPressed: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: widget.loan.date,
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null && picked != DateTime.now()) {
+                    setState(() {
+                      // No need to update _selectedRepaymentDate, as it's not used in _addPartialRepayment
+                    });
+                  }
+                },
                 icon: const Icon(Icons.edit_calendar),
                 label: const Text('Change'),
               ),
@@ -1339,121 +1304,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildEarlyRepaymentCard() {
-    return InfoCard(
-      title: 'Early Repayment Calculator',
-      titleIcon: Icons.calculate,
-      titleColor: Colors.teal[700],
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.teal[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.teal[200]!),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.teal[700]),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Enable to calculate repayment based on actual days instead of full term',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: SwitchListTile(
-            title: const Text(
-              'Enable Early Repayment Calculation',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              _isEarlyRepaymentEnabled
-                  ? 'Interest calculated for ${widget.loan.daysPassed} days only'
-                  : 'Full interest applies regardless of early payment',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            value: _isEarlyRepaymentEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _isEarlyRepaymentEnabled = value;
-              });
-            },
-            activeColor: Colors.teal[700],
-          ),
-        ),
-        if (_isEarlyRepaymentEnabled &&
-            widget.loan.daysPassed < widget.loan.duration) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green[300]!),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.savings, color: Colors.green[700]),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Early Repayment Benefits',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                InfoRow(
-                  label: 'Days Used',
-                  value:
-                      '${widget.loan.daysPassed} of ${widget.loan.duration} days',
-                  icon: Icons.calendar_today,
-                ),
-                InfoRow(
-                  label: 'Interest Saved',
-                  value:
-                      'NPR ${(widget.loan.agreedPeriodInterest - _earlyRepaymentInterest).toStringAsFixed(2)}',
-                  color: Colors.green[700],
-                  icon: Icons.trending_down,
-                ),
-                InfoRow(
-                  label: 'Total Payable',
-                  value: 'NPR ${_earlyRepaymentAmount.toStringAsFixed(2)}',
-                  color: Colors.green[700],
-                  icon: Icons.calculate,
-                  isAmount: true,
-                ),
-                InfoRow(
-                  label: 'Amount Due',
-                  value: 'NPR ${_earlyRepaymentDueAmount.toStringAsFixed(2)}',
-                  color: _earlyRepaymentDueAmount > 0
-                      ? Colors.red[700]
-                      : Colors.green[700],
-                  icon: Icons.account_balance,
-                  isAmount: true,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
     );
   }
 

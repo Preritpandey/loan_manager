@@ -380,7 +380,8 @@ class AddLoanPage extends StatelessWidget {
           icon: const Icon(Icons.check_circle, color: Colors.green),
         );
 
-        Get.back();
+        // Navigate to loans page
+        Get.offAllNamed('/');
       } catch (e) {
         Get.snackbar(
           'Error',

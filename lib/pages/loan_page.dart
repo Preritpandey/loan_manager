@@ -14,8 +14,10 @@ class _LoanHomePageState extends State<LoanHomePage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   final LoanController controller = Get.put(LoanController());
   final searchController = TextEditingController();
+  final searchFocusNode = FocusNode();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  bool _showSuggestions = false;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _LoanHomePageState extends State<LoanHomePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     searchController.dispose();
+    searchFocusNode.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -57,54 +60,79 @@ class _LoanHomePageState extends State<LoanHomePage>
       vertical: isDesktop ? 24.0 : 16.0,
     );
 
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: _buildAppBar(isDesktop),
-      body: Center(
-        child: Container(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Obx(() {
-              if (controller.isLoading.value) {
-                return _buildLoadingState();
-              }
+    return GestureDetector(
+      onTap: () {
+        // Hide suggestions when tapping outside
+        if (_showSuggestions) {
+          setState(() {
+            _showSuggestions = false;
+          });
+        }
+        searchFocusNode.unfocus();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: _buildAppBar(isDesktop),
+        body: Center(
+          child: Container(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Obx(() {
+                if (controller.isLoading.value) {
+                  return _buildLoadingState();
+                }
 
-              final groupedLoans = controller.getLoansGroupedByCustomer();
-              final customerNames = groupedLoans.keys.toList();
+                final groupedLoans = controller.getLoansGroupedByCustomer();
+                final customerNames = groupedLoans.keys.toList();
 
-              if (customerNames.isEmpty) {
-                return _buildEmptyState();
-              }
+                // Show empty state only if there are no loans at all
+                if (customerNames.isEmpty && controller.loans.isEmpty) {
+                  return _buildEmptyState();
+                }
 
-              return Column(
-                children: [
-                  // Search Bar
-                  _buildSearchBar(padding, isDesktop),
+                // Show no results state only after explicit search
+                if (controller.shouldShowNoResults()) {
+                  return _buildNoResultsState();
+                }
 
-                  // Search Results Indicator
-                  if (controller.isSearchActive())
-                    _buildSearchResultsIndicator(padding, isDesktop),
+                return SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Search Bar
+                      _buildSearchBar(padding, isDesktop),
 
-                  // Summary Cards
-                  _buildSummarySection(padding, isDesktop),
+                      // Search Suggestions
+                      if (_showSuggestions &&
+                          controller.searchSuggestions.isNotEmpty)
+                        _buildSearchSuggestions(padding, isDesktop),
 
-                  // Loans List
-                  Expanded(
-                    child: _buildLoansList(
-                      customerNames,
-                      groupedLoans,
-                      padding,
-                      isDesktop,
-                    ),
+                      // Search Results Indicator
+                      if (controller.getIsSearchActive())
+                        _buildSearchResultsIndicator(padding, isDesktop),
+
+                      // Single Summary Card
+                      _buildSingleSummaryCard(padding, isDesktop),
+
+                      // Loans List
+                      _buildLoansList(
+                        customerNames,
+                        groupedLoans,
+                        padding,
+                        isDesktop,
+                      ),
+
+                      // Bottom padding for FAB
+                      const SizedBox(height: 100),
+                    ],
                   ),
-                ],
-              );
-            }),
+                );
+              }),
+            ),
           ),
         ),
+        floatingActionButton: _buildFloatingActionButton(isDesktop),
       ),
-      floatingActionButton: _buildFloatingActionButton(isDesktop),
     );
   }
 
@@ -113,51 +141,57 @@ class _LoanHomePageState extends State<LoanHomePage>
       title: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.account_balance_wallet,
-              color: Colors.white,
-              size: 24,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(60),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.asset(
+                fit: BoxFit.cover,
+                "assets/icon.png",
+                width: 30,
+                height: 30,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Loan Manager',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                'Manage your loans efficiently',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ],
           ),
         ],
       ),
-      backgroundColor: Colors.blue[700],
+      backgroundColor: const Color.fromARGB(255, 204, 21, 27),
       foregroundColor: Colors.white,
       elevation: 0,
-      toolbarHeight: isDesktop ? 80 : 64,
+      toolbarHeight: isDesktop ? 60 : 48,
       actions: [
         if (isDesktop) ...[
           IconButton(
-            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+            icon: const Icon(
+              Icons.picture_as_pdf,
+              color: Colors.white,
+              size: 20,
+            ),
             onPressed: () => controller.exportToPDF(),
             tooltip: 'Export to PDF',
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
             onPressed: () => controller.refreshLoans(),
             tooltip: 'Refresh',
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
       ],
     );
@@ -181,10 +215,29 @@ class _LoanHomePageState extends State<LoanHomePage>
           ),
           child: TextField(
             controller: searchController,
-            onChanged: (value) => controller.search(value),
+            focusNode: searchFocusNode,
+            onChanged: (value) {
+              controller.search(value);
+              setState(() {
+                _showSuggestions = value.isNotEmpty;
+              });
+            },
+            onSubmitted: (value) {
+              controller.performExplicitSearch(value);
+              setState(() {
+                _showSuggestions = false;
+              });
+            },
+            onTap: () {
+              if (searchController.text.isNotEmpty) {
+                setState(() {
+                  _showSuggestions = true;
+                });
+              }
+            },
             decoration: InputDecoration(
               hintText: isDesktop
-                  ? 'Search by customer name, serial number, phone number ...'
+                  ? 'Search by customer name, serial number ...'
                   : 'Search customers, serial, phone...',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -206,7 +259,10 @@ class _LoanHomePageState extends State<LoanHomePage>
                       icon: const Icon(Icons.clear),
                       onPressed: () {
                         searchController.clear();
-                        controller.search('');
+                        controller.clearSearch();
+                        setState(() {
+                          _showSuggestions = false;
+                        });
                       },
                     )
                   : null,
@@ -215,6 +271,38 @@ class _LoanHomePageState extends State<LoanHomePage>
                 vertical: 16,
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchSuggestions(EdgeInsets padding, bool isDesktop) {
+    return Container(
+      margin: padding.copyWith(top: 4, bottom: 0),
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 200),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: controller.searchSuggestions.length,
+            itemBuilder: (context, index) {
+              final suggestion = controller.searchSuggestions[index];
+              return ListTile(
+                leading: Icon(Icons.search, color: Colors.blue[700], size: 20),
+                title: Text(suggestion, style: const TextStyle(fontSize: 14)),
+                onTap: () {
+                  searchController.text = suggestion;
+                  controller.performExplicitSearch(suggestion);
+                  setState(() {
+                    _showSuggestions = false;
+                  });
+                  searchFocusNode.unfocus();
+                },
+              );
+            },
           ),
         ),
       ),
@@ -250,7 +338,10 @@ class _LoanHomePageState extends State<LoanHomePage>
               TextButton.icon(
                 onPressed: () {
                   searchController.clear();
-                  controller.search('');
+                  controller.clearSearch();
+                  setState(() {
+                    _showSuggestions = false;
+                  });
                 },
                 icon: const Icon(Icons.clear, size: 16),
                 label: const Text('Clear'),
@@ -269,180 +360,143 @@ class _LoanHomePageState extends State<LoanHomePage>
     );
   }
 
-  Widget _buildSummarySection(EdgeInsets padding, bool isDesktop) {
+  Widget _buildSingleSummaryCard(EdgeInsets padding, bool isDesktop) {
     return Container(
       margin: padding,
-      child: isDesktop ? _buildDesktopSummary() : _buildMobileSummary(),
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              colors: [Colors.white, Colors.blue[50]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.blue.withOpacity(0.2)),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.analytics,
+                      color: Colors.blue[700],
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Loan Summary',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryItem(
+                      'Total Loans',
+                      '${controller.getTotalLoansCount()}',
+                      Icons.receipt_long,
+                      Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildSummaryItem(
+                      'Total Due',
+                      'NPR ${controller.getTotalDueAmount().toStringAsFixed(0)}',
+                      Icons.account_balance,
+                      Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryItem(
+                      'Overdue',
+                      '${controller.getOverdueLoansCount()}',
+                      Icons.warning,
+                      Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildSummaryItem(
+                      'Received',
+                      'NPR ${controller.getTotalReceivedAmount().toStringAsFixed(0)}',
+                      Icons.payment,
+                      Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildDesktopSummary() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildSummaryCard(
-            'Total Loans',
-            '${controller.getTotalLoansCount()}',
-            Icons.receipt_long,
-            Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildSummaryCard(
-            'Total Due',
-            'NPR ${controller.getTotalDueAmount().toStringAsFixed(2)}',
-            Icons.account_balance,
-            Colors.red,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildSummaryCard(
-            'Overdue',
-            '${controller.getOverdueLoansCount()}',
-            Icons.warning,
-            Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildSummaryCard(
-            'Received',
-            'NPR ${controller.getTotalReceivedAmount().toStringAsFixed(2)}',
-            Icons.payment,
-            Colors.green,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMobileSummary() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                'Total Loans',
-                '${controller.getTotalLoansCount()}',
-                Icons.receipt_long,
-                Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                'Overdue',
-                '${controller.getOverdueLoansCount()}',
-                Icons.warning,
-                Colors.orange,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                'Total Due',
-                'NPR ${controller.getTotalDueAmount().toStringAsFixed(2)}',
-                Icons.account_balance,
-                Colors.red,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                'Received',
-                'NPR ${controller.getTotalReceivedAmount().toStringAsFixed(2)}',
-                Icons.payment,
-                Colors.green,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard(
+  Widget _buildSummaryItem(
     String title,
     String value,
     IconData icon,
     Color color,
   ) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: [Colors.white, color.withOpacity(0.05)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w500,
                   ),
-                  child: Icon(icon, color: color, size: 20),
                 ),
-                if (title == 'Overdue' && controller.getOverdueLoansCount() > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red[100],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '!',
-                      style: TextStyle(
-                        color: Colors.red[700],
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
               ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 16,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -514,23 +568,23 @@ class _LoanHomePageState extends State<LoanHomePage>
                   ],
                 ),
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: customerNames.length,
-                  itemBuilder: (context, index) {
-                    final customerName = customerNames[index];
-                    final customerLoans = groupedLoans[customerName]!;
-                    return AnimatedContainer(
-                      duration: Duration(milliseconds: 200 + (index * 50)),
-                      curve: Curves.easeOutBack,
-                      child: CustomerTile(
-                        customerName: customerName,
-                        customerLoans: customerLoans,
-                      ),
-                    );
-                  },
-                ),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(8),
+                itemCount: customerNames.length,
+                itemBuilder: (context, index) {
+                  final customerName = customerNames[index];
+                  final customerLoans = groupedLoans[customerName]!;
+                  return AnimatedContainer(
+                    duration: Duration(milliseconds: 200 + (index * 50)),
+                    curve: Curves.easeOutBack,
+                    child: CustomerTile(
+                      customerName: customerName,
+                      customerLoans: customerLoans,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -617,7 +671,112 @@ class _LoanHomePageState extends State<LoanHomePage>
                   Icon(Icons.lightbulb_outline, color: Colors.blue[700]),
                   const SizedBox(width: 8),
                   Text(
-                    'Tip: Use the search bar to find specific loans',
+                    'Tip: Use the search bar to find\nspecific loans',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(32),
+              ),
+              child: Icon(Icons.search_off, size: 80, color: Colors.blue[300]),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'No results found for "${searchController.text}"',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Try a different search term or add a new loan.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    searchController.clear();
+                    controller.clearSearch();
+                    setState(() {
+                      _showSuggestions = false;
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Back to All Loans'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: () => Get.toNamed('/add'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add New Loan'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Colors.blue[700]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tip: Try searching by name, serial number,\nor phone number',
                     style: TextStyle(
                       color: Colors.blue[700],
                       fontSize: 14,
@@ -673,178 +832,3 @@ class _LoanHomePageState extends State<LoanHomePage>
     }
   }
 }
-
-// // features/loan/pages/loan_home_page.dart
-// import 'package:flutter/material.dart';
-// import 'package:get/get.dart';
-// import 'package:list/controllers/loan_controller.dart';
-// import 'package:list/pages/customer_tile.dart';
-
-// class LoanHomePage extends StatefulWidget {
-//   const LoanHomePage({super.key});
-
-//   @override
-//   State<LoanHomePage> createState() => _LoanHomePageState();
-// }
-
-// class _LoanHomePageState extends State<LoanHomePage>
-//     with WidgetsBindingObserver {
-//   final LoanController controller = Get.put(LoanController());
-//   final searchController = TextEditingController();
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     WidgetsBinding.instance.addObserver(this);
-//   }
-
-//   @override
-//   void dispose() {
-//     WidgetsBinding.instance.removeObserver(this);
-//     searchController.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   void didChangeAppLifecycleState(AppLifecycleState state) {
-//     if (state == AppLifecycleState.resumed) {
-//       controller.refreshLoans();
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: const Text('Loan Manager'),
-//         bottom: PreferredSize(
-//           preferredSize: const Size.fromHeight(50),
-//           child: Padding(
-//             padding: const EdgeInsets.all(8.0),
-//             child: TextField(
-//               controller: searchController,
-//               onChanged: (value) => controller.search(value),
-//               decoration: const InputDecoration(
-//                 hintText: 'Search by customer name, serial, phone...',
-//                 border: OutlineInputBorder(),
-//                 prefixIcon: Icon(Icons.search),
-//               ),
-//             ),
-//           ),
-//         ),
-//       ),
-//       body: Obx(() {
-//         if (controller.isLoading.value) {
-//           return const Center(child: CircularProgressIndicator());
-//         }
-
-//         final groupedLoans = controller.getLoansGroupedByCustomer();
-//         final customerNames = groupedLoans.keys.toList();
-
-//         if (customerNames.isEmpty) {
-//           return const Center(
-//             child: Column(
-//               mainAxisAlignment: MainAxisAlignment.center,
-//               children: [
-//                 Icon(
-//                   Icons.account_balance_wallet_outlined,
-//                   size: 64,
-//                   color: Colors.grey,
-//                 ),
-//                 SizedBox(height: 16),
-//                 Text(
-//                   'No loans found',
-//                   style: TextStyle(fontSize: 18, color: Colors.grey),
-//                 ),
-//                 SizedBox(height: 8),
-//                 Text(
-//                   'Add your first loan using the + button',
-//                   style: TextStyle(fontSize: 14, color: Colors.grey),
-//                 ),
-//               ],
-//             ),
-//           );
-//         }
-
-//         return Column(
-//           children: [
-//             // Summary Card
-//             Container(
-//               margin: const EdgeInsets.all(8),
-//               padding: const EdgeInsets.all(16),
-//               decoration: BoxDecoration(
-//                 color: Colors.blue.withOpacity(0.1),
-//                 borderRadius: BorderRadius.circular(12),
-//                 border: Border.all(color: Colors.blue.withOpacity(0.3)),
-//               ),
-//               child: Row(
-//                 children: [
-//                   Expanded(
-//                     child: Column(
-//                       crossAxisAlignment: CrossAxisAlignment.start,
-//                       children: [
-//                         Text(
-//                           'Total Loans: ${controller.getTotalLoansCount()}',
-//                           style: const TextStyle(
-//                             fontWeight: FontWeight.bold,
-//                             fontSize: 16,
-//                           ),
-//                         ),
-//                         const SizedBox(height: 4),
-//                         Text(
-//                           'Total Due: NPR ${controller.getTotalDueAmount().toStringAsFixed(2)}',
-//                           style: const TextStyle(
-//                             color: Colors.red,
-//                             fontWeight: FontWeight.bold,
-//                           ),
-//                         ),
-//                       ],
-//                     ),
-//                   ),
-//                   Column(
-//                     crossAxisAlignment: CrossAxisAlignment.end,
-//                     children: [
-//                       Text(
-//                         'Overdue: ${controller.getOverdueLoansCount()}',
-//                         style: const TextStyle(
-//                           color: Colors.red,
-//                           fontWeight: FontWeight.bold,
-//                         ),
-//                       ),
-//                       const SizedBox(height: 4),
-//                       Text(
-//                         'Received: NPR ${controller.getTotalReceivedAmount().toStringAsFixed(2)}',
-//                         style: const TextStyle(
-//                           color: Colors.green,
-//                           fontWeight: FontWeight.bold,
-//                         ),
-//                       ),
-//                     ],
-//                   ),
-//                 ],
-//               ),
-//             ),
-//             // Loans List
-//             Expanded(
-//               child: ListView.builder(
-//                 itemCount: customerNames.length,
-//                 itemBuilder: (context, index) {
-//                   final customerName = customerNames[index];
-//                   final customerLoans = groupedLoans[customerName]!;
-//                   return CustomerTile(
-//                     customerName: customerName,
-//                     customerLoans: customerLoans,
-//                   );
-//                 },
-//               ),
-//             ),
-//           ],
-//         );
-//       }),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: () => Get.toNamed('/add'),
-//         child: const Icon(Icons.add),
-//       ),
-//     );
-//   }
-// }
