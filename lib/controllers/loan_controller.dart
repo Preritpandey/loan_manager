@@ -1,6 +1,13 @@
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:list/models/loan.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
+import 'package:intl/intl.dart';
 
 class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
@@ -195,6 +202,16 @@ class LoanController extends GetxController {
     }
   }
 
+  // Get filtered loans for display
+  List<Loan> getFilteredLoans() {
+    return filteredLoans;
+  }
+
+  // Check if search is active
+  bool isSearchActive() {
+    return filteredLoans.length != loans.length;
+  }
+
   void deleteLoanBySerial(String serialNumber) {
     try {
       final loanIndex = loans.indexWhere(
@@ -243,7 +260,8 @@ class LoanController extends GetxController {
   Map<String, List<Loan>> getLoansGroupedByCustomer() {
     try {
       final groupedLoans = <String, List<Loan>>{};
-      for (final loan in loans) {
+      // Use filteredLoans instead of loans for search functionality
+      for (final loan in filteredLoans) {
         if (groupedLoans.containsKey(loan.name)) {
           groupedLoans[loan.name]!.add(loan);
         } else {
@@ -485,5 +503,450 @@ class LoanController extends GetxController {
       print('Error calculating total early repayment amount: $e');
       return 0.0;
     }
+  }
+
+  // Export all loan data to PDF
+  Future<void> exportToPDF() async {
+    try {
+      isLoading.value = true;
+
+      // Request storage permission
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        _showSnackbar('Error', 'Storage permission is required to save PDF');
+        return;
+      }
+
+      // Create PDF document
+      final pdf = pw.Document();
+
+      // Add pages to PDF
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Loan Manager Report',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.Text(
+                          'Generated on: ${DateTime.now().toString().substring(0, 19)}',
+                          style: const pw.TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.blue,
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(8),
+                        ),
+                      ),
+                      child: pw.Text(
+                        'Total Loans: ${loans.length}',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Summary Section
+              pw.Container(
+                margin: const pw.EdgeInsets.only(top: 20, bottom: 20),
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(8),
+                  ),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Summary',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Amount Given',
+                            'NPR ${getTotalLoansAmount().toStringAsFixed(2)}',
+                            PdfColors.blue,
+                          ),
+                        ),
+                        pw.SizedBox(width: 10),
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Amount Received',
+                            'NPR ${getTotalReceivedAmount().toStringAsFixed(2)}',
+                            PdfColors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Due Amount',
+                            'NPR ${getTotalDueAmount().toStringAsFixed(2)}',
+                            PdfColors.red,
+                          ),
+                        ),
+                        pw.SizedBox(width: 10),
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Overdue Loans',
+                            '${getOverdueLoansCount()}',
+                            PdfColors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Customer Loans Section
+              ..._buildCustomerLoansSection(),
+            ];
+          },
+        ),
+      );
+
+      // Save PDF to device
+      final output = await getTemporaryDirectory();
+      final file = File(
+        '${output.path}/loan_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      await file.writeAsBytes(await pdf.save());
+
+      // Open the PDF file
+      await OpenFile.open(file.path);
+
+      _showSnackbar('Success', 'PDF exported successfully and opened');
+    } catch (e) {
+      print('Error exporting PDF: $e');
+      _showSnackbar('Error', 'Failed to export PDF: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  pw.Widget _buildSummaryBox(String title, String value, PdfColor color) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        border: pw.Border.all(color: color),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            title,
+            style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+          ),
+          pw.SizedBox(height: 5),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<pw.Widget> _buildCustomerLoansSection() {
+    final groupedLoans = getLoansGroupedByCustomer();
+    final widgets = <pw.Widget>[];
+
+    groupedLoans.forEach((customerName, customerLoans) {
+      final totalDue = getTotalDueAmountForCustomer(customerName);
+      final isOverdue = isCustomerOverdue(customerName);
+
+      widgets.add(
+        pw.Container(
+          margin: const pw.EdgeInsets.only(bottom: 20),
+          padding: const pw.EdgeInsets.all(15),
+          decoration: pw.BoxDecoration(
+            color: isOverdue ? PdfColors.red50 : PdfColors.white,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+            border: pw.Border.all(
+              color: isOverdue ? PdfColors.red : PdfColors.grey300,
+            ),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Customer Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Expanded(
+                    child: pw.Text(
+                      customerName,
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (isOverdue)
+                    pw.Container(
+                      padding: pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.red,
+                        borderRadius: pw.BorderRadius.all(
+                          pw.Radius.circular(12),
+                        ),
+                      ),
+                      child: pw.Text(
+                        'OVERDUE',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  pw.Container(
+                    padding: pw.EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.blue,
+                      borderRadius: pw.BorderRadius.all(pw.Radius.circular(12)),
+                    ),
+                    child: pw.Text(
+                      '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
+                      style: pw.TextStyle(
+                        color: PdfColors.white,
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 10),
+
+              // Customer Summary
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: _buildCustomerSummaryItem(
+                      'Total Given',
+                      'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountGiven).toStringAsFixed(2)}',
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: _buildCustomerSummaryItem(
+                      'Total Received',
+                      'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountReceived).toStringAsFixed(2)}',
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: _buildCustomerSummaryItem(
+                      'Total Due',
+                      'NPR ${totalDue.toStringAsFixed(2)}',
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 15),
+
+              // Individual Loans Table
+              pw.Text(
+                'Individual Loans:',
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+
+              // Table Header
+              pw.Container(
+                padding: pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Serial',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Text(
+                        'Jewellery',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Given',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Received',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Due',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Status',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Table Rows
+              ...customerLoans
+                  .map(
+                    (loan) => pw.Container(
+                      margin: pw.EdgeInsets.only(top: 2),
+                      padding: pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(
+                        color: loan.isOverdue
+                            ? PdfColors.red50
+                            : PdfColors.white,
+                        borderRadius: pw.BorderRadius.all(
+                          pw.Radius.circular(4),
+                        ),
+                        border: pw.Border.all(color: PdfColors.grey300),
+                      ),
+                      child: pw.Row(
+                        children: [
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(loan.serialNumber),
+                          ),
+                          pw.Expanded(
+                            flex: 3,
+                            child: pw.Text(loan.jewelleryName),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              'NPR ${loan.amountReceived.toStringAsFixed(2)}',
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              'NPR ${loan.dueAmount.toStringAsFixed(2)}',
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Text(
+                              loan.isOverdue ? 'Overdue' : 'Active',
+                              style: pw.TextStyle(
+                                color: loan.isOverdue
+                                    ? PdfColors.red
+                                    : PdfColors.green,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+
+              pw.SizedBox(height: 10),
+              pw.Text(
+                'Phone: ${customerLoans.first.phone}',
+                style: pw.TextStyle(fontSize: 12, color: PdfColors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+
+    return widgets;
+  }
+
+  pw.Widget _buildCustomerSummaryItem(String label, String value) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          label,
+          style: pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+        ),
+      ],
+    );
   }
 }

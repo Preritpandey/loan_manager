@@ -82,6 +82,10 @@ class _LoanHomePageState extends State<LoanHomePage>
                   // Search Bar
                   _buildSearchBar(padding, isDesktop),
 
+                  // Search Results Indicator
+                  if (controller.isSearchActive())
+                    _buildSearchResultsIndicator(padding, isDesktop),
+
                   // Summary Cards
                   _buildSummarySection(padding, isDesktop),
 
@@ -143,6 +147,12 @@ class _LoanHomePageState extends State<LoanHomePage>
       actions: [
         if (isDesktop) ...[
           IconButton(
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+            onPressed: () => controller.exportToPDF(),
+            tooltip: 'Export to PDF',
+          ),
+          const SizedBox(width: 16),
+          IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () => controller.refreshLoans(),
             tooltip: 'Refresh',
@@ -174,7 +184,7 @@ class _LoanHomePageState extends State<LoanHomePage>
             onChanged: (value) => controller.search(value),
             decoration: InputDecoration(
               hintText: isDesktop
-                  ? 'Search by customer name, serial number, phone number, or address...'
+                  ? 'Search by customer name, serial number, phone number ...'
                   : 'Search customers, serial, phone...',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -205,6 +215,54 @@ class _LoanHomePageState extends State<LoanHomePage>
                 vertical: 16,
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResultsIndicator(EdgeInsets padding, bool isDesktop) {
+    return Container(
+      margin: padding.copyWith(top: 8, bottom: 0),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Search Results: ${controller.getFilteredLoans().length} loans found',
+                style: TextStyle(
+                  color: Colors.blue[700],
+                  fontWeight: FontWeight.w600,
+                  fontSize: isDesktop ? 14 : 12,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () {
+                  searchController.clear();
+                  controller.search('');
+                },
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('Clear'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue[700],
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -576,15 +634,43 @@ class _LoanHomePageState extends State<LoanHomePage>
   }
 
   Widget _buildFloatingActionButton(bool isDesktop) {
-    return FloatingActionButton.extended(
-      onPressed: () => Get.toNamed('/add'),
-      backgroundColor: Colors.blue[700],
-      foregroundColor: Colors.white,
-      elevation: 6,
-      icon: const Icon(Icons.add_circle_outline),
-      label: Text(isDesktop ? 'Add New Loan' : 'Add Loan'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    );
+    if (isDesktop) {
+      return FloatingActionButton.extended(
+        onPressed: () => Get.toNamed('/add'),
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
+        elevation: 6,
+        icon: const Icon(Icons.add_circle_outline),
+        label: const Text('Add New Loan'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      );
+    } else {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            onPressed: () => controller.exportToPDF(),
+            backgroundColor: Colors.green[600],
+            foregroundColor: Colors.white,
+            elevation: 6,
+            heroTag: 'export_pdf',
+            child: const Icon(Icons.picture_as_pdf),
+          ),
+          const SizedBox(height: 16),
+          FloatingActionButton.extended(
+            onPressed: () => Get.toNamed('/add'),
+            backgroundColor: Colors.blue[700],
+            foregroundColor: Colors.white,
+            elevation: 6,
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('Add Loan'),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ],
+      );
+    }
   }
 }
 
