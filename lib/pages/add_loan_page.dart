@@ -2,13 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:list/controllers/loan_controller.dart';
-import 'package:list/models/loan.dart';
+import 'package:list/controllers/add_loan_form_controller.dart';
 
 class AddLoanPage extends StatelessWidget {
-  final controller = Get.find<LoanController>();
-  final formKey = GlobalKey<FormState>();
-  final data = <String, dynamic>{};
+  final controller = Get.put(AddLoanFormController());
 
   AddLoanPage({super.key});
 
@@ -42,7 +39,7 @@ class AddLoanPage extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(isDesktop ? 32.0 : 24.0),
                 child: Form(
-                  key: formKey,
+                  key: controller.formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -93,6 +90,13 @@ class AddLoanPage extends StatelessWidget {
                         'address',
                         icon: Icons.location_on_outlined,
                         maxLines: 2,
+                      ),
+
+                      // Loan Reissue Notification
+                      Obx(
+                        () => controller.showingReissueInfo.value
+                            ? _buildLoanReissueCard()
+                            : const SizedBox.shrink(),
                       ),
 
                       const SizedBox(height: 24),
@@ -186,7 +190,7 @@ class AddLoanPage extends StatelessWidget {
                           Expanded(
                             flex: isDesktop ? 1 : 1,
                             child: ElevatedButton.icon(
-                              onPressed: _handleSubmit,
+                              onPressed: () => controller.submitForm(),
                               icon: const Icon(Icons.add_circle_outline),
                               label: const Text('Add Loan'),
                               style: ElevatedButton.styleFrom(
@@ -293,16 +297,17 @@ class AddLoanPage extends StatelessWidget {
         inputFormatters: isNumber
             ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
             : null,
-        onSaved: (value) => data[key] = value,
+        onSaved: (value) => controller.updateFormData(key, value),
         validator: (value) {
-          if (!required) return null;
-          if (value == null || value.isEmpty) {
-            return '$label is required';
+          if (!required) return controller.validateOptionalField(value);
+          if (isNumber) {
+            return controller.validateNumberField(
+              value,
+              label,
+              required: required,
+            );
           }
-          if (isNumber && double.tryParse(value) == null) {
-            return 'Please enter a valid number';
-          }
-          return null;
+          return controller.validateRequiredField(value, label);
         },
       ),
     );
@@ -342,143 +347,135 @@ class AddLoanPage extends StatelessWidget {
         items: options.map((String value) {
           return DropdownMenuItem<String>(value: value, child: Text(value));
         }).toList(),
-        onChanged: (value) => data[key] = value,
-        onSaved: (value) => data[key] = value,
-        validator: (value) =>
-            value == null || value.isEmpty ? '$label is required' : null,
+        onChanged: (value) => controller.updateFormData(key, value),
+        onSaved: (value) => controller.updateFormData(key, value),
+        validator: (value) => controller.validateRequiredField(value, label),
       ),
     );
   }
 
-  void _handleSubmit() {
-    if (formKey.currentState!.validate()) {
-      formKey.currentState!.save();
+  Widget _buildLoanReissueCard() {
+    final customerName = controller.formData['name'] ?? '';
+    final collateralInfo = controller.getLastCollateralInfo(customerName);
 
-      try {
-        controller.addLoan(
-          Loan(
-            name: data['name'],
-            date: DateTime.now(),
-            duration: int.parse(data['duration']),
-            interestRate: double.parse(data['interestRate']),
-            type: data['type'],
-            jewelleryName: data['jewelleryName'],
-            serialNumber: data['serialNumber'],
-            phone: data['phone'],
-            address: data['address'],
-            description: data['description'] ?? '',
-            amountGiven: double.parse(data['amountGiven']),
+    if (collateralInfo == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16, bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Loan Reissue Detected',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[700],
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () => controller.dismissReissueInfo(),
+                icon: Icon(Icons.close, color: Colors.blue[700], size: 18),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
-        );
+          const SizedBox(height: 8),
+          Text(
+            'We found a previous loan for $customerName with the same collateral:',
+            style: TextStyle(color: Colors.blue[800], fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInfoRow('Collateral Type', collateralInfo['type']),
+                _buildInfoRow('Jewelry Name', collateralInfo['jewelleryName']),
+                _buildInfoRow('Serial Number', collateralInfo['serialNumber']),
+                _buildInfoRow('Phone', collateralInfo['phone']),
+                _buildInfoRow('Address', collateralInfo['address']),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      controller.autoFillFromPreviousLoan(customerName),
+                  icon: const Icon(Icons.auto_fix_high, size: 16),
+                  label: const Text('Auto-fill Information'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () => controller.dismissReissueInfo(),
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text('Enter New Info'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue[700],
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-        // Show success message
-        Get.snackbar(
-          'Success',
-          'Loan added successfully',
-          backgroundColor: Colors.green[100],
-          colorText: Colors.green[800],
-          icon: const Icon(Icons.check_circle, color: Colors.green),
-        );
-
-        // Navigate to loans page
-        Get.offAllNamed('/');
-      } catch (e) {
-        Get.snackbar(
-          'Error',
-          'Failed to add loan. Please check your input.',
-          backgroundColor: Colors.red[100],
-          colorText: Colors.red[800],
-          icon: const Icon(Icons.error, color: Colors.red),
-        );
-      }
-    }
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Text(
+            ': $value',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+          ),
+        ],
+      ),
+    );
   }
 }
-
-// // features/loan/pages/add_loan_page.dart
-// import 'package:flutter/material.dart';
-// import 'package:get/get.dart';
-// import 'package:list/controllers/loan_controller.dart';
-// import 'package:list/models/loan.dart';
-
-// class AddLoanPage extends StatelessWidget {
-//   final controller = Get.find<LoanController>();
-//   final formKey = GlobalKey<FormState>();
-//   final data = <String, dynamic>{};
-
-//   AddLoanPage({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('Add Loan')),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16.0),
-//         child: Form(
-//           key: formKey,
-//           child: SingleChildScrollView(
-//             child: Column(
-//               children: [
-//                 _buildTextField('Loan Taker Name', 'name'),
-//                 _buildTextField('Duration (days)', 'duration', isNumber: true),
-//                 _buildTextField(
-//                   'Interest Rate (%)',
-//                   'interestRate',
-//                   isNumber: true,
-//                 ),
-//                 _buildTextField('Gold/Silver', 'type'),
-//                 _buildTextField('Jewellery Name', 'jewelleryName'),
-//                 _buildTextField('Serial Number', 'serialNumber'),
-//                 _buildTextField('Phone Number', 'phone'),
-//                 _buildTextField('Address', 'address'),
-//                 _buildTextField('Description', 'description'),
-//                 _buildTextField('Loan Amount', 'amountGiven', isNumber: true),
-//                 const SizedBox(height: 16),
-//                 ElevatedButton(
-//                   onPressed: () {
-//                     if (formKey.currentState!.validate()) {
-//                       formKey.currentState!.save();
-//                       controller.addLoan(
-//                         Loan(
-//                           name: data['name'],
-//                           date: DateTime.now(),
-//                           duration: int.parse(data['duration']),
-//                           interestRate: double.parse(data['interestRate']),
-//                           type: data['type'],
-//                           jewelleryName: data['jewelleryName'],
-//                           serialNumber: data['serialNumber'],
-//                           phone: data['phone'],
-//                           address: data['address'],
-//                           description: data['description'],
-//                           amountGiven: double.parse(data['amountGiven']),
-//                         ),
-//                       );
-//                       Get.back();
-//                     }
-//                   },
-//                   child: const Text('Add Loan'),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-
-//   Widget _buildTextField(String label, String key, {bool isNumber = false}) {
-//     return Padding(
-//       padding: const EdgeInsets.symmetric(vertical: 8.0),
-//       child: TextFormField(
-//         decoration: InputDecoration(
-//           labelText: label,
-//           border: OutlineInputBorder(),
-//         ),
-//         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-//         onSaved: (value) => data[key] = value,
-//         validator: (value) =>
-//             value == null || value.isEmpty ? 'Required' : null,
-//       ),
-//     );
-//   }
-// }

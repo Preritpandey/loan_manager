@@ -289,7 +289,7 @@ class LoanController extends GetxController {
       loan.delete();
       loans.removeAt(loanIndex);
       filteredLoans.value = loans;
-      _showSnackbar('Success', 'Loan deleted successfully');
+      // Note: Success snackbar will be shown by the calling controller
     } catch (e) {
       print('Error deleting loan: $e');
       _showSnackbar('Error', 'Failed to delete loan');
@@ -304,6 +304,40 @@ class LoanController extends GetxController {
     } catch (e) {
       print('Error getting customer names: $e');
       return [];
+    }
+  }
+
+  // Get the most recent loan for a customer (for loan reissue)
+  Loan? getMostRecentLoanForCustomer(String customerName) {
+    try {
+      final customerLoans = getLoansByCustomerName(customerName);
+      if (customerLoans.isEmpty) return null;
+      
+      // Sort by date (most recent first)
+      customerLoans.sort((a, b) => b.date.compareTo(a.date));
+      return customerLoans.first;
+    } catch (e) {
+      print('Error getting most recent loan: $e');
+      return null;
+    }
+  }
+
+  // Get collateral info for customer (for loan reissue)
+  Map<String, dynamic>? getLastCollateralInfo(String customerName) {
+    try {
+      final recentLoan = getMostRecentLoanForCustomer(customerName);
+      if (recentLoan == null) return null;
+      
+      return {
+        'serialNumber': recentLoan.serialNumber,
+        'type': recentLoan.type,
+        'jewelleryName': recentLoan.jewelleryName,
+        'address': recentLoan.address,
+        'phone': recentLoan.phone,
+      };
+    } catch (e) {
+      print('Error getting collateral info: $e');
+      return null;
     }
   }
 
@@ -510,13 +544,13 @@ class LoanController extends GetxController {
       if (loan.duration <= 30) {
         final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
         final actualInterest =
-            (loan.amountGiven * loan.interestRate) / 100 * effectiveDays;
+            (loan.amountGiven * loan.dailyInterestRate * effectiveDays) / 100;
         return loan.amountGiven + actualInterest;
       }
 
       // Rule 2: For loans longer than 30 days, use actual days passed
       final actualInterest =
-          (loan.amountGiven * loan.interestRate) / 100 * daysPassed;
+          (loan.amountGiven * loan.dailyInterestRate * daysPassed) / 100;
       return loan.amountGiven + actualInterest;
     } catch (e) {
       print('Error calculating early repayment amount: $e');
@@ -532,11 +566,11 @@ class LoanController extends GetxController {
       // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
       if (loan.duration <= 30) {
         final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
-        return (loan.amountGiven * loan.interestRate) / 100 * effectiveDays;
+        return (loan.amountGiven * loan.dailyInterestRate * effectiveDays) / 100;
       }
 
       // Rule 2: For loans longer than 30 days, use actual days passed
-      return (loan.amountGiven * loan.interestRate) / 100 * daysPassed;
+      return (loan.amountGiven * loan.dailyInterestRate * daysPassed) / 100;
     } catch (e) {
       print('Error calculating early repayment interest: $e');
       return loan.agreedPeriodInterest;
@@ -568,15 +602,58 @@ class LoanController extends GetxController {
     }
   }
 
+  // Helper method to request appropriate storage permissions
+  Future<bool> _requestStoragePermissions() async {
+    try {
+      if (Platform.isAndroid) {
+        // For Android 11+ (API 30+), check MANAGE_EXTERNAL_STORAGE first
+        if (await Permission.manageExternalStorage.isGranted) {
+          return true;
+        }
+        
+        // Try requesting MANAGE_EXTERNAL_STORAGE
+        final manageStorageStatus = await Permission.manageExternalStorage.request();
+        if (manageStorageStatus.isGranted) {
+          return true;
+        }
+        
+        // If MANAGE_EXTERNAL_STORAGE is denied, try regular storage permissions
+        final storagePermissions = [
+          Permission.storage,
+          if (Platform.isAndroid) Permission.photos,
+        ];
+        
+        // Check if any storage permission is already granted
+        for (final permission in storagePermissions) {
+          if (await permission.isGranted) {
+            return true;
+          }
+        }
+        
+        // Request storage permissions
+        final results = await storagePermissions.request();
+        return results.values.any((status) => status.isGranted);
+      } else {
+        // For iOS and other platforms
+        final status = await Permission.storage.request();
+        return status.isGranted;
+      }
+    } catch (e) {
+      print('Error requesting storage permissions: $e');
+      return false;
+    }
+  }
+
   // Export all loan data to PDF
   Future<void> exportToPDF() async {
     try {
       isLoading.value = true;
 
-      // Request storage permission
-      final status = await Permission.storage.request();
-      if (!status.isGranted) {
-        _showSnackbar('Error', 'Storage permission is required to save PDF');
+      // Check and request appropriate permissions
+      bool permissionGranted = await _requestStoragePermissions();
+      
+      if (!permissionGranted) {
+        _showSnackbar('Error', 'Storage permission is required to save PDF. Please grant permission in app settings.');
         return;
       }
 
@@ -705,7 +782,25 @@ class LoanController extends GetxController {
       );
 
       // Save PDF to device
-      final output = await getTemporaryDirectory();
+      Directory? output;
+      try {
+        // Try to save to Downloads directory (doesn't require permissions on modern Android)
+        if (Platform.isAndroid) {
+          output = Directory('/storage/emulated/0/Download');
+          if (!await output.exists()) {
+            // Fallback to external storage directory
+            output = await getExternalStorageDirectory();
+            output ??= await getApplicationDocumentsDirectory();
+          }
+        } else {
+          // For iOS and other platforms
+          output = await getApplicationDocumentsDirectory();
+        }
+      } catch (e) {
+        print('Error getting storage directory: $e');
+        output = await getTemporaryDirectory();
+      }
+      
       final file = File(
         '${output.path}/loan_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );

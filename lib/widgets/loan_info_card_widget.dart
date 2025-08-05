@@ -30,9 +30,15 @@ class LoanInfoCard extends StatelessWidget {
           icon: Icons.schedule,
         ),
         InfoRow(
-          label: 'Interest Rate',
+          label: 'Annual Interest Rate',
           value: '${loan.interestRate}%',
           icon: Icons.percent,
+        ),
+        InfoRow(
+          label: 'Daily Interest Rate',
+          value: '${loan.dailyInterestRate.toStringAsFixed(4)}%',
+          icon: Icons.percent,
+          color: Colors.blue[600],
         ),
         InfoRow(
           label: 'Due Date',

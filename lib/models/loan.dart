@@ -47,28 +47,64 @@ class Loan extends HiveObject {
     List<PartialRepayment>? partialRepayments,
   }) : partialRepayments = partialRepayments ?? [];
 
-  // Calculate effective days for interest calculation
+  // Calculate effective days for interest calculation (for current status)
   int get effectiveDaysForInterest {
     final daysPassed = this.daysPassed;
 
     // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
     if (duration <= 30) {
+      // For short loans, charge minimum 30 days or actual days if longer
       return daysPassed <= 30 ? 30 : daysPassed;
     }
 
-    // Rule 2: For loans longer than 30 days, use actual days passed (up to duration)
-    return daysPassed <= duration ? daysPassed : duration;
+    // Rule 2: For loans longer than 30 days, use full duration if not yet matured,
+    // or actual days passed if overdue
+    if (daysPassed <= duration) {
+      // Loan not yet matured - use actual days passed (for current calculation)
+      return daysPassed;
+    } else {
+      // Loan is overdue - use actual days passed
+      return daysPassed;
+    }
   }
 
-  // Calculate interest based on remaining balance after partial repayments
+  // Calculate effective days for the agreed loan period (for total due calculation)
+  int get agreedPeriodDays {
+    // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
+    if (duration <= 30) {
+      return 30; // Always minimum 30 days for short loans
+    }
+
+    // Rule 2: For loans longer than 30 days, use the full agreed duration
+    return duration;
+  }
+
+  // Convert annual interest rate to daily rate
+  double get dailyInterestRate {
+    return interestRate / 365;
+  }
+
+  // Calculate interest (uses agreed period for total due calculations)
   double get calculatedInterest {
+    // For most calculations, we want the agreed period interest
+    return agreedPeriodInterest;
+  }
+
+  // Calculate current interest based on actual time passed (for current status display)
+  double get currentCalculatedInterest {
     double currentBalance = amountGiven;
     double totalInterest = 0.0;
     int lastCalculationDay = 0;
+    final effectiveDays = effectiveDaysForInterest;
 
     // Sort partial repayments by date
     final sortedRepayments = List<PartialRepayment>.from(partialRepayments)
       ..sort((a, b) => a.date.compareTo(b.date));
+
+    // If no partial repayments, calculate simple interest for current period
+    if (sortedRepayments.isEmpty) {
+      return (amountGiven * dailyInterestRate * effectiveDays) / 100;
+    }
 
     // Calculate interest for each period between repayments
     for (final repayment in sortedRepayments) {
@@ -76,16 +112,55 @@ class Loan extends HiveObject {
           repayment.daysSinceLoan - lastCalculationDay;
       if (daysSinceLastCalculation > 0) {
         totalInterest +=
-            (currentBalance * interestRate / 100) * daysSinceLastCalculation;
+            (currentBalance * dailyInterestRate * daysSinceLastCalculation) / 100;
       }
       currentBalance -= repayment.amount;
       lastCalculationDay = repayment.daysSinceLoan;
     }
 
     // Calculate interest for the remaining period
-    final remainingDays = effectiveDaysForInterest - lastCalculationDay;
+    final remainingDays = effectiveDays - lastCalculationDay;
     if (remainingDays > 0) {
-      totalInterest += (currentBalance * interestRate / 100) * remainingDays;
+      totalInterest += (currentBalance * dailyInterestRate * remainingDays) / 100;
+    }
+
+    return totalInterest;
+  }
+
+  // Calculate interest for the full agreed period (for total due calculation) 
+  double get agreedPeriodInterest {
+    double currentBalance = amountGiven;
+    double totalInterest = 0.0;
+    int lastCalculationDay = 0;
+    final effectiveDays = agreedPeriodDays;
+
+    // Sort partial repayments by date
+    final sortedRepayments = List<PartialRepayment>.from(partialRepayments)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    // If no partial repayments, calculate simple interest for agreed period
+    if (sortedRepayments.isEmpty) {
+      return (amountGiven * dailyInterestRate * effectiveDays) / 100;
+    }
+
+    // Calculate interest for each period between repayments (limited to agreed period)
+    for (final repayment in sortedRepayments) {
+      if (repayment.daysSinceLoan > effectiveDays) break; // Don't go beyond agreed period
+      
+      final daysSinceLastCalculation =
+          repayment.daysSinceLoan - lastCalculationDay;
+      if (daysSinceLastCalculation > 0) {
+        totalInterest +=
+            (currentBalance * dailyInterestRate * daysSinceLastCalculation) / 100;
+      }
+      currentBalance -= repayment.amount;
+      lastCalculationDay = repayment.daysSinceLoan;
+    }
+
+    // Calculate interest for the remaining period (up to agreed period)
+    final remainingDays = effectiveDays - lastCalculationDay;
+    if (remainingDays > 0) {
+      totalInterest += (currentBalance * dailyInterestRate * remainingDays) / 100;
     }
 
     return totalInterest;
@@ -104,7 +179,7 @@ class Loan extends HiveObject {
     if (isOverdue) {
       final totalDueAtDueDate = amountGiven + baseInterest;
       final overdueDays = this.overdueDays;
-      final overdueInterestPerDay = (totalDueAtDueDate * interestRate) / 100;
+      final overdueInterestPerDay = (totalDueAtDueDate * dailyInterestRate) / 100;
       final overdueInterest = overdueInterestPerDay * overdueDays;
       return baseInterest + overdueInterest;
     }
@@ -131,15 +206,15 @@ class Loan extends HiveObject {
   }
 
   double get totalDueAtDueDate {
-    // This is the amount due at the end of the agreed period with new interest calculation
-    return amountGiven + calculatedInterest;
+    // This is the amount due at the end of the agreed period with agreed period interest
+    return amountGiven + agreedPeriodInterest;
   }
 
   double get overdueInterest {
     if (!isOverdue) return 0.0;
 
     final overdueDays = this.overdueDays;
-    final overdueInterestPerDay = (totalDueAtDueDate * interestRate) / 100;
+    final overdueInterestPerDay = (totalDueAtDueDate * dailyInterestRate) / 100;
     return overdueInterestPerDay * overdueDays;
   }
 
@@ -148,9 +223,6 @@ class Loan extends HiveObject {
     return DateTime.now().difference(date).inDays;
   }
 
-  double get agreedPeriodInterest {
-    return calculatedInterest;
-  }
 
   double get currentInterest {
     return compoundInterest;
@@ -168,9 +240,9 @@ class Loan extends HiveObject {
     return amountGiven - amountReceived;
   }
 
-  // New getter for immediate total due (principal + calculated interest)
+  // New getter for immediate total due (principal + agreed period interest)
   double get immediateTotalDue {
-    return amountGiven + calculatedInterest;
+    return amountGiven + agreedPeriodInterest;
   }
 
   // Method to add partial repayment
@@ -184,13 +256,26 @@ class Loan extends HiveObject {
       ),
     );
     amountReceived += amount;
-    save();
+    // Only save if the object is in a box (to avoid test errors)
+    if (isInBox) {
+      save();
+    }
   }
 
   // Get current balance after all partial repayments
   double get currentBalance {
     return amountGiven -
         partialRepayments.fold(0.0, (sum, repayment) => sum + repayment.amount);
+  }
+
+  // Calculate interest for custom number of days
+  double calculateCustomDaysInterest(int customDays) {
+    return (amountGiven * dailyInterestRate * customDays) / 100;
+  }
+
+  // Calculate total amount for custom number of days
+  double calculateCustomDaysTotal(int customDays) {
+    return amountGiven + calculateCustomDaysInterest(customDays);
   }
 }
 
