@@ -1,8 +1,11 @@
 // core/app.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:list/controllers/otp_verify_controller.dart';
 import 'package:list/pages/add_loan_page.dart';
 import 'package:list/pages/loan_page.dart';
+import 'package:list/pages/otp_verification_screen.dart';
+import 'package:list/pages/splash_screen.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -12,11 +15,16 @@ class MyApp extends StatelessWidget {
     return GetMaterialApp(
       title: 'Loan Manager',
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
+      initialRoute: '/splash',
       getPages: [
-        GetPage(name: '/', page: () => LoanHomePage()),
+        GetPage(name: '/home', page: () => LoanHomePage()),
         GetPage(name: '/add', page: () => AddLoanPage()),
+        GetPage(name: '/otp', page: () => OtpScreen()),
+        GetPage(name: '/splash', page: () => SplashScreen()),
       ],
+      initialBinding: BindingsBuilder(() {
+        Get.put(AuthController());
+      }),
     );
   }
 }
