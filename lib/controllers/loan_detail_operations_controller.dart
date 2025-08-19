@@ -6,12 +6,12 @@ import 'package:list/models/loan.dart';
 
 class LoanDetailOperationsController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
-  
+
   final receivedAmountController = TextEditingController();
-  
+
   final isProcessingAction = false.obs;
   Timer? _updateTimer;
-  
+
   late Loan _loan;
   Loan get loan => _loan;
 
@@ -48,8 +48,11 @@ class LoanDetailOperationsController extends GetxController {
       // Update the local loan object
       _loan.amountReceived = newAmount;
 
-      // Refresh loan calculations
+      // Refresh loan calculations and force UI update
       _loanController.refreshLoanCalculations();
+
+      // Force immediate UI rebuild
+      update();
 
       _showSuccessSnackbar('Received amount updated successfully');
       return true;
@@ -69,22 +72,18 @@ class LoanDetailOperationsController extends GetxController {
     return true;
   }
 
-
-
   Future<bool> deleteLoan() async {
     try {
       _loanController.deleteLoanBySerial(_loan.serialNumber);
       _showSuccessSnackbar('Loan deleted successfully');
-      
-      // Navigate back to loan list with proper cleanup
-      Get.offAllNamed('/'); // This ensures we go back to the main loan list page
-      
+
       return true;
     } catch (e) {
       _showErrorSnackbar('Failed to delete loan');
       return false;
     }
   }
+
 
   void showDeleteConfirmationDialog() {
     Get.dialog(
@@ -99,14 +98,11 @@ class LoanDetailOperationsController extends GetxController {
         ),
         content: _buildDeleteConfirmationContent(),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
-              Get.back(); // Close dialog
               deleteLoan();
+              Get.back();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red[700],
@@ -153,7 +149,6 @@ class LoanDetailOperationsController extends GetxController {
       ],
     );
   }
-
 
   void _showSuccessSnackbar(String message) {
     _showSnackbar('Success', message, Colors.green, Colors.white);

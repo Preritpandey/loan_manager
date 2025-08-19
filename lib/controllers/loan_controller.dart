@@ -53,6 +53,9 @@ class LoanController extends GetxController {
       loans.add(loan);
       filteredLoans.value = loans;
       _showSnackbar('Success', 'Loan added successfully');
+
+      // Navigate back to loan home page
+      Get.offAllNamed('/home');
     } catch (e) {
       print('Error adding loan: $e');
       _showSnackbar('Error', 'Failed to add loan');
@@ -93,6 +96,9 @@ class LoanController extends GetxController {
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
+
+      // Force UI update
+      update();
     } catch (e) {
       print('Error updating amount by serial: $e');
       _showSnackbar('Error', 'Failed to update amount');
@@ -289,6 +295,10 @@ class LoanController extends GetxController {
       loan.delete();
       loans.removeAt(loanIndex);
       filteredLoans.value = loans;
+
+      // Navigate back to loan home page
+      Get.offAllNamed('/home');
+
       // Note: Success snackbar will be shown by the calling controller
     } catch (e) {
       print('Error deleting loan: $e');
@@ -312,7 +322,7 @@ class LoanController extends GetxController {
     try {
       final customerLoans = getLoansByCustomerName(customerName);
       if (customerLoans.isEmpty) return null;
-      
+
       // Sort by date (most recent first)
       customerLoans.sort((a, b) => b.date.compareTo(a.date));
       return customerLoans.first;
@@ -327,7 +337,7 @@ class LoanController extends GetxController {
     try {
       final recentLoan = getMostRecentLoanForCustomer(customerName);
       if (recentLoan == null) return null;
-      
+
       return {
         'serialNumber': recentLoan.serialNumber,
         'type': recentLoan.type,
@@ -566,7 +576,8 @@ class LoanController extends GetxController {
       // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
       if (loan.duration <= 30) {
         final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
-        return (loan.amountGiven * loan.dailyInterestRate * effectiveDays) / 100;
+        return (loan.amountGiven * loan.dailyInterestRate * effectiveDays) /
+            100;
       }
 
       // Rule 2: For loans longer than 30 days, use actual days passed
@@ -610,26 +621,27 @@ class LoanController extends GetxController {
         if (await Permission.manageExternalStorage.isGranted) {
           return true;
         }
-        
+
         // Try requesting MANAGE_EXTERNAL_STORAGE
-        final manageStorageStatus = await Permission.manageExternalStorage.request();
+        final manageStorageStatus = await Permission.manageExternalStorage
+            .request();
         if (manageStorageStatus.isGranted) {
           return true;
         }
-        
+
         // If MANAGE_EXTERNAL_STORAGE is denied, try regular storage permissions
         final storagePermissions = [
           Permission.storage,
           if (Platform.isAndroid) Permission.photos,
         ];
-        
+
         // Check if any storage permission is already granted
         for (final permission in storagePermissions) {
           if (await permission.isGranted) {
             return true;
           }
         }
-        
+
         // Request storage permissions
         final results = await storagePermissions.request();
         return results.values.any((status) => status.isGranted);
@@ -651,9 +663,12 @@ class LoanController extends GetxController {
 
       // Check and request appropriate permissions
       bool permissionGranted = await _requestStoragePermissions();
-      
+
       if (!permissionGranted) {
-        _showSnackbar('Error', 'Storage permission is required to save PDF. Please grant permission in app settings.');
+        _showSnackbar(
+          'Error',
+          'Storage permission is required to save PDF. Please grant permission in app settings.',
+        );
         return;
       }
 
@@ -800,7 +815,7 @@ class LoanController extends GetxController {
         print('Error getting storage directory: $e');
         output = await getTemporaryDirectory();
       }
-      
+
       final file = File(
         '${output.path}/loan_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );

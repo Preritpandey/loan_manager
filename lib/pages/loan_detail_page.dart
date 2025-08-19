@@ -64,7 +64,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
             ),
           ],
         ),
-        backgroundColor: Colors.blue[700],
+        backgroundColor: Color.fromARGB(255, 204, 21, 27),
         foregroundColor: Colors.white,
         elevation: 0,
       ),

@@ -1,5 +1,3 @@
-
-// screens/otp_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -25,7 +23,7 @@ class OtpScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: 40),
-              
+
               // Icon
               Center(
                 child: Container(
@@ -35,15 +33,11 @@ class OtpScreen extends StatelessWidget {
                     color: Colors.blue.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.lock_outline,
-                    size: 50,
-                    color: Colors.blue,
-                  ),
+                  child: Icon(Icons.lock_outline, size: 50, color: Colors.blue),
                 ),
               ),
               SizedBox(height: 30),
-              
+
               // Title
               Text(
                 'Enter Verification Code',
@@ -55,18 +49,15 @@ class OtpScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 10),
-              
+
               // Subtitle
               Text(
                 'Please enter the 6-digit OTP code to continue',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 40),
-              
+
               // OTP Input Field
               TextField(
                 controller: otpController,
@@ -105,80 +96,85 @@ class OtpScreen extends StatelessWidget {
                   authController.clearError();
                 },
               ),
-              
+
               // Error message
-              Obx(() => authController.errorMessage.value.isNotEmpty
-                  ? Container(
-                      margin: EdgeInsets.only(top: 10),
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                      ),
-                      child: Text(
-                        authController.errorMessage.value,
-                        style: TextStyle(color: Colors.red),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : SizedBox()),
-              
-              SizedBox(height: 30),
-              
-              // Verify Button
-              Obx(() => ElevatedButton(
-                onPressed: authController.isLoading.value
-                    ? null
-                    : () {
-                        if (otpController.text.length == 6) {
-                          authController.verifyOtp(otpController.text);
-                        } else {
-                          Get.snackbar(
-                            'Invalid OTP',
-                            'Please enter a 6-digit OTP',
-                            backgroundColor: Colors.orange,
-                            colorText: Colors.white,
-                            snackPosition: SnackPosition.TOP,
-                          );
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
-                child: authController.isLoading.value
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              Obx(
+                () => authController.errorMessage.value.isNotEmpty
+                    ? Container(
+                        margin: EdgeInsets.only(top: 10),
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          authController.errorMessage.value,
+                          style: TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
                         ),
                       )
-                    : Text(
-                        'Verify OTP',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                    : SizedBox(),
+              ),
+
+              SizedBox(height: 30),
+
+              // Verify Button
+              Obx(
+                () => ElevatedButton(
+                  onPressed: authController.isLoading.value
+                      ? null
+                      : () {
+                          if (otpController.text.length == 6) {
+                            authController.verifyOtp(otpController.text);
+                          } else {
+                            Get.snackbar(
+                              'Invalid OTP',
+                              'Please enter a 6-digit OTP',
+                              backgroundColor: Colors.orange,
+                              colorText: Colors.white,
+                              snackPosition: SnackPosition.TOP,
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: authController.isLoading.value
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          'Verify OTP',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-              )),
-              
+                ),
+              ),
+
               Spacer(),
-              
+
               // Footer text
               Text(
                 'By verifying, you agree to our terms and conditions',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
             ],

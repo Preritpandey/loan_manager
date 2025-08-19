@@ -1,5 +1,6 @@
 // models/loan.dart
 import 'package:hive/hive.dart';
+import 'package:list/utils/nepali_date_utils.dart';
 part 'loan.g.dart';
 
 @HiveType(typeId: 0)
@@ -8,6 +9,8 @@ class Loan extends HiveObject {
   String name;
   @HiveField(1)
   DateTime date;
+  @HiveField(13)
+  String? nepaliDateString; // Store Nepali date as string for backward compatibility
   @HiveField(2)
   int duration;
   @HiveField(3)
@@ -45,7 +48,42 @@ class Loan extends HiveObject {
     required this.amountGiven,
     this.amountReceived = 0.0,
     List<PartialRepayment>? partialRepayments,
+    this.nepaliDateString,
   }) : partialRepayments = partialRepayments ?? [];
+
+  // Factory constructor for creating loan with Nepali date
+  factory Loan.withNepaliDate({
+    required String name,
+    required NepaliDate nepaliDate,
+    required int duration,
+    required double interestRate,
+    required String type,
+    required String jewelleryName,
+    required String serialNumber,
+    required String phone,
+    required String address,
+    required String description,
+    required double amountGiven,
+    double amountReceived = 0.0,
+    List<PartialRepayment>? partialRepayments,
+  }) {
+    return Loan(
+      name: name,
+      date: nepaliDate.toGregorian(),
+      duration: duration,
+      interestRate: interestRate,
+      type: type,
+      jewelleryName: jewelleryName,
+      serialNumber: serialNumber,
+      phone: phone,
+      address: address,
+      description: description,
+      amountGiven: amountGiven,
+      amountReceived: amountReceived,
+      partialRepayments: partialRepayments,
+      nepaliDateString: nepaliDate.format(),
+    );
+  }
 
   // Calculate effective days for interest calculation (for current status)
   int get effectiveDaysForInterest {
@@ -112,7 +150,8 @@ class Loan extends HiveObject {
           repayment.daysSinceLoan - lastCalculationDay;
       if (daysSinceLastCalculation > 0) {
         totalInterest +=
-            (currentBalance * dailyInterestRate * daysSinceLastCalculation) / 100;
+            (currentBalance * dailyInterestRate * daysSinceLastCalculation) /
+            100;
       }
       currentBalance -= repayment.amount;
       lastCalculationDay = repayment.daysSinceLoan;
@@ -121,13 +160,14 @@ class Loan extends HiveObject {
     // Calculate interest for the remaining period
     final remainingDays = effectiveDays - lastCalculationDay;
     if (remainingDays > 0) {
-      totalInterest += (currentBalance * dailyInterestRate * remainingDays) / 100;
+      totalInterest +=
+          (currentBalance * dailyInterestRate * remainingDays) / 100;
     }
 
     return totalInterest;
   }
 
-  // Calculate interest for the full agreed period (for total due calculation) 
+  // Calculate interest for the full agreed period (for total due calculation)
   double get agreedPeriodInterest {
     double currentBalance = amountGiven;
     double totalInterest = 0.0;
@@ -145,13 +185,15 @@ class Loan extends HiveObject {
 
     // Calculate interest for each period between repayments (limited to agreed period)
     for (final repayment in sortedRepayments) {
-      if (repayment.daysSinceLoan > effectiveDays) break; // Don't go beyond agreed period
-      
+      if (repayment.daysSinceLoan > effectiveDays)
+        break; // Don't go beyond agreed period
+
       final daysSinceLastCalculation =
           repayment.daysSinceLoan - lastCalculationDay;
       if (daysSinceLastCalculation > 0) {
         totalInterest +=
-            (currentBalance * dailyInterestRate * daysSinceLastCalculation) / 100;
+            (currentBalance * dailyInterestRate * daysSinceLastCalculation) /
+            100;
       }
       currentBalance -= repayment.amount;
       lastCalculationDay = repayment.daysSinceLoan;
@@ -160,7 +202,8 @@ class Loan extends HiveObject {
     // Calculate interest for the remaining period (up to agreed period)
     final remainingDays = effectiveDays - lastCalculationDay;
     if (remainingDays > 0) {
-      totalInterest += (currentBalance * dailyInterestRate * remainingDays) / 100;
+      totalInterest +=
+          (currentBalance * dailyInterestRate * remainingDays) / 100;
     }
 
     return totalInterest;
@@ -179,7 +222,8 @@ class Loan extends HiveObject {
     if (isOverdue) {
       final totalDueAtDueDate = amountGiven + baseInterest;
       final overdueDays = this.overdueDays;
-      final overdueInterestPerDay = (totalDueAtDueDate * dailyInterestRate) / 100;
+      final overdueInterestPerDay =
+          (totalDueAtDueDate * dailyInterestRate) / 100;
       final overdueInterest = overdueInterestPerDay * overdueDays;
       return baseInterest + overdueInterest;
     }
@@ -222,7 +266,6 @@ class Loan extends HiveObject {
   int get daysPassed {
     return DateTime.now().difference(date).inDays;
   }
-
 
   double get currentInterest {
     return compoundInterest;
@@ -276,6 +319,30 @@ class Loan extends HiveObject {
   // Calculate total amount for custom number of days
   double calculateCustomDaysTotal(int customDays) {
     return amountGiven + calculateCustomDaysInterest(customDays);
+  }
+
+  // Get Nepali date
+  NepaliDate get nepaliDate {
+    if (nepaliDateString != null && nepaliDateString!.isNotEmpty) {
+      final parsed = NepaliDate.parse(nepaliDateString!);
+      if (parsed != null) return parsed;
+    }
+    // Fallback to conversion from Gregorian date
+    return NepaliDate.fromGregorian(date);
+  }
+
+  // Set Nepali date
+  void setNepaliDate(NepaliDate nepaliDate) {
+    this.nepaliDateString = nepaliDate.format();
+    this.date = nepaliDate.toGregorian();
+    if (isInBox) {
+      save();
+    }
+  }
+
+  // Get formatted Nepali date string
+  String get formattedNepaliDate {
+    return nepaliDate.format();
   }
 }
 

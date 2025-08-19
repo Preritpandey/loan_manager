@@ -17,7 +17,10 @@ class LoanStatusHeader extends StatelessWidget {
       padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.blue[500]!],
+          colors: [
+            Color.fromARGB(255, 204, 21, 27),
+            Color.fromARGB(255, 224, 1, 76),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -62,15 +65,19 @@ class LoanStatusHeader extends StatelessWidget {
                       'NPR ${loan.dueAmount.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: loan.dueAmount > 0
-                            ? Colors.red[300]
-                            : Colors.green[300],
+                            ? Colors.red[100]
+                            : Colors.green[100],
                         fontSize: isMobile ? 18 : 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'Amount Due',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -85,24 +92,24 @@ class LoanStatusHeader extends StatelessWidget {
               if (loan.isFullyPaid)
                 StatusBadge(
                   text: 'FULLY PAID',
-                  color: Colors.green[300]!,
+                  color: Colors.green[100]!,
                   icon: Icons.check_circle,
                 )
               else if (loan.isOverdue)
                 StatusBadge(
                   text: '${loan.overdueDays} DAYS OVERDUE',
-                  color: Colors.red[300]!,
+                  color: Colors.red[100]!,
                   icon: Icons.warning,
                 )
               else
                 StatusBadge(
                   text: '${loan.daysRemaining} DAYS LEFT',
-                  color: Colors.orange[300]!,
+                  color: Colors.orange[100]!,
                   icon: Icons.schedule,
                 ),
               StatusBadge(
-                text: '${loan.interestRate}% DAILY',
-                color: Colors.purple[300]!,
+                text: '${loan.interestRate}% YEARLY',
+                color: Colors.purple[100]!,
                 icon: Icons.percent,
               ),
             ],

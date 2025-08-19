@@ -7,8 +7,8 @@ import 'dart:convert';
 
 class AuthController extends GetxController {
   static const String _otpVerifiedKey = 'otp_verified';
-  static const String _baseUrl = 'http://localhost:3000'; // Replace with your server URL
-  
+  static const String _baseUrl = 'https://otp-manager-i83k.onrender.com';
+
   final RxBool isOtpVerified = false.obs;
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
@@ -27,10 +27,10 @@ class AuthController extends GetxController {
       final prefs = await SharedPreferences.getInstance();
       final verified = prefs.getBool(_otpVerifiedKey) ?? false;
       isOtpVerified.value = verified;
-      
+
       // Navigate based on verification status
       await Future.delayed(Duration(seconds: 2)); // Splash screen delay
-      
+
       if (verified) {
         Get.offAllNamed('/home');
       } else {
@@ -52,12 +52,8 @@ class AuthController extends GetxController {
 
       final response = await http.post(
         Uri.parse('$_baseUrl/verify-otp'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'otp': otp,
-        }),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'otp': otp}),
       );
 
       final data = jsonDecode(response.body);
@@ -66,7 +62,7 @@ class AuthController extends GetxController {
         // OTP verified successfully
         await _saveOtpVerificationStatus(true);
         isOtpVerified.value = true;
-        
+
         Get.snackbar(
           'Success',
           'OTP verified successfully!',
@@ -74,7 +70,7 @@ class AuthController extends GetxController {
           colorText: Colors.white,
           snackPosition: SnackPosition.TOP,
         );
-        
+
         // Navigate to home screen
         Get.offAllNamed('/home');
       } else {
@@ -121,6 +117,3 @@ class AuthController extends GetxController {
     errorMessage.value = '';
   }
 }
-
-
-

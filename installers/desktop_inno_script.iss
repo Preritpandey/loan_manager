@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Loan Manager"
-#define MyAppVersion "1.5"
+#define MyAppVersion "1.8"
 #define MyAppPublisher "My Company, Inc."
 #define MyAppURL "https://www.example.com/"
 #define MyAppExeName "list.exe"
@@ -32,7 +32,7 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\LOQ\Desktop\work\list\installers
-OutputBaseFilename=loan manager
+OutputBaseFilename=loan manager_final
 SolidCompression=yes
 WizardStyle=modern
 

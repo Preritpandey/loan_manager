@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
+import 'package:list/utils/nepali_date_utils.dart';
 
 class AddLoanFormController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
-  
+
   final formKey = GlobalKey<FormState>();
   final formData = <String, dynamic>{}.obs;
   final isSubmitting = false.obs;
   final showingReissueInfo = false.obs;
+  final selectedNepaliDate = NepaliDate.today().obs;
+  final useCustomDate = false.obs;
 
   void updateFormData(String key, dynamic value) {
     formData[key] = value;
-    
-    // If the customer name is updated, check for loan reissue
+
     if (key == 'name' && value != null && value.toString().isNotEmpty) {
       _checkForLoanReissue(value.toString());
     }
@@ -22,25 +24,19 @@ class AddLoanFormController extends GetxController {
 
   void _checkForLoanReissue(String customerName) {
     final collateralInfo = _loanController.getLastCollateralInfo(customerName);
-    if (collateralInfo != null) {
-      showingReissueInfo.value = true;
-    } else {
-      showingReissueInfo.value = false;
-    }
+    showingReissueInfo.value = collateralInfo != null;
   }
 
   void autoFillFromPreviousLoan(String customerName) {
     final collateralInfo = _loanController.getLastCollateralInfo(customerName);
     if (collateralInfo != null) {
-      // Auto-fill the form with previous loan information
       formData['phone'] = collateralInfo['phone'];
       formData['address'] = collateralInfo['address'];
       formData['type'] = collateralInfo['type'];
       formData['jewelleryName'] = collateralInfo['jewelleryName'];
       formData['serialNumber'] = collateralInfo['serialNumber'];
-      
+
       showingReissueInfo.value = false;
-      
       _showSuccessSnackbar('Previous loan information auto-filled');
     }
   }
@@ -60,7 +56,11 @@ class AddLoanFormController extends GetxController {
     return null;
   }
 
-  String? validateNumberField(String? value, String fieldName, {bool required = true}) {
+  String? validateNumberField(
+    String? value,
+    String fieldName, {
+    bool required = true,
+  }) {
     if (!required && (value == null || value.isEmpty)) return null;
     if (value == null || value.isEmpty) {
       return '$fieldName is required';
@@ -72,7 +72,7 @@ class AddLoanFormController extends GetxController {
   }
 
   String? validateOptionalField(String? value) {
-    return null; // Optional fields don't need validation
+    return null;
   }
 
   bool validateForm() {
@@ -84,46 +84,50 @@ class AddLoanFormController extends GetxController {
   }
 
   Future<bool> submitForm() async {
-    if (!validateForm()) {
-      return false;
-    }
+    if (isSubmitting.value) return false;
+
+    if (!validateForm()) return false;
 
     saveFormData();
     isSubmitting.value = true;
 
+    bool success = false;
+
     try {
-      // Validate all required fields
       if (!_validateAllRequiredFields()) {
         _showErrorSnackbar('Please fill in all required fields');
         return false;
       }
 
-      // Create loan object
       final loan = _createLoanFromFormData();
-      
-      // Add loan through controller
-      _loanController.addLoan(loan);
+      if (loan == null) {
+        _showErrorSnackbar('Invalid data. Please check your inputs.');
+        return false;
+      }
 
-      _showSuccessSnackbar('Loan added successfully');
-      
-      // Navigate to loans page
-      Get.offAllNamed('/');
-      
-      return true;
-    } catch (e) {
-      _showErrorSnackbar('Failed to add loan. Please check your input.');
-      return false;
+      _loanController.addLoan(loan);
+    } catch (e, stack) {
+      print("Error while adding loan: $e\n$stack");
     } finally {
       isSubmitting.value = false;
     }
+
+    return success;
   }
 
   bool _validateAllRequiredFields() {
     final requiredFields = [
-      'name', 'phone', 'address', 'amountGiven', 
-      'interestRate', 'duration', 'type', 'jewelleryName', 'serialNumber'
+      'name',
+      'phone',
+      'address',
+      'amountGiven',
+      'interestRate',
+      'duration',
+      'type',
+      'jewelleryName',
+      'serialNumber',
     ];
-    
+
     for (final field in requiredFields) {
       if (formData[field] == null || formData[field].toString().isEmpty) {
         return false;
@@ -132,51 +136,90 @@ class AddLoanFormController extends GetxController {
     return true;
   }
 
-  Loan _createLoanFromFormData() {
-    return Loan(
-      name: formData['name'],
-      date: DateTime.now(),
-      duration: int.parse(formData['duration']),
-      interestRate: double.parse(formData['interestRate']),
-      type: formData['type'],
-      jewelleryName: formData['jewelleryName'],
-      serialNumber: formData['serialNumber'],
-      phone: formData['phone'],
-      address: formData['address'],
-      description: formData['description'] ?? '',
-      amountGiven: double.parse(formData['amountGiven']),
-    );
+  Loan? _createLoanFromFormData() {
+    try {
+      final durationStr = formData['duration']?.toString() ?? '';
+      final interestStr = formData['interestRate']?.toString() ?? '';
+      final amountStr = formData['amountGiven']?.toString() ?? '';
+
+      final duration = int.tryParse(durationStr);
+      final interestRate = double.tryParse(interestStr);
+      final amountGiven = double.tryParse(amountStr);
+
+      if (duration == null || interestRate == null || amountGiven == null) {
+        return null;
+      }
+
+      return Loan.withNepaliDate(
+        name: formData['name'],
+        nepaliDate: selectedNepaliDate.value,
+        duration: duration,
+        interestRate: interestRate,
+        type: formData['type'],
+        jewelleryName: formData['jewelleryName'],
+        serialNumber: formData['serialNumber'],
+        phone: formData['phone'],
+        address: formData['address'],
+        description: formData['description'] ?? '',
+        amountGiven: amountGiven,
+      );
+    } catch (e) {
+      print("Loan creation failed: $e");
+      return null;
+    }
   }
 
   void _showSuccessSnackbar(String message) {
-    Get.snackbar(
-      'Success',
-      message,
-      backgroundColor: Colors.green[100],
-      colorText: Colors.green[800],
-      icon: const Icon(Icons.check_circle, color: Colors.green),
-    );
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      Get.snackbar(
+        'Success',
+        message,
+        backgroundColor: Colors.green[100],
+        colorText: Colors.green[800],
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 2),
+      );
+    });
   }
 
   void _showErrorSnackbar(String message) {
-    Get.snackbar(
-      'Error',
-      message,
-      backgroundColor: Colors.red[100],
-      colorText: Colors.red[800],
-      icon: const Icon(Icons.error, color: Colors.red),
-    );
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      Get.snackbar(
+        'Error',
+        message,
+        backgroundColor: Colors.red[100],
+        colorText: Colors.red[800],
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 2),
+      );
+    });
   }
 
   void resetForm() {
     formKey.currentState?.reset();
     formData.clear();
     isSubmitting.value = false;
+    selectedNepaliDate.value = NepaliDate.today();
+    useCustomDate.value = false;
   }
 
-  @override
-  void onClose() {
-    resetForm();
-    super.onClose();
+  void setNepaliDate(NepaliDate nepaliDate) {
+    selectedNepaliDate.value = nepaliDate;
+  }
+
+  void toggleCustomDate(bool useCustom) {
+    useCustomDate.value = useCustom;
+    if (!useCustom) {
+      selectedNepaliDate.value = NepaliDate.today();
+    }
+  }
+
+  void parseCustomNepaliDate(String dateString) {
+    final parsed = NepaliDate.parse(dateString);
+    if (parsed != null) {
+      selectedNepaliDate.value = parsed;
+    }
   }
 }

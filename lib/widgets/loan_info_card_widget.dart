@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/widgets/info_row_widget.dart';
+import 'package:list/utils/nepali_date_utils.dart';
 
 class LoanInfoCard extends StatelessWidget {
   final Loan loan;
@@ -12,6 +13,10 @@ class LoanInfoCard extends StatelessWidget {
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  String _formatNepaliDate(NepaliDate nepaliDate) {
+    return nepaliDate.format();
+  }
+
   @override
   Widget build(BuildContext context) {
     return InfoCard(
@@ -20,7 +25,12 @@ class LoanInfoCard extends StatelessWidget {
       titleColor: Colors.green[700],
       children: [
         InfoRow(
-          label: 'Loan Date',
+          label: 'Loan Date (Nepali)',
+          value: _formatNepaliDate(loan.nepaliDate),
+          icon: Icons.calendar_today,
+        ),
+        InfoRow(
+          label: 'Loan Date (Gregorian)',
           value: _formatDate(loan.date),
           icon: Icons.calendar_today,
         ),

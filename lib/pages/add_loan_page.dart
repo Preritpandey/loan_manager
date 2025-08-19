@@ -1,8 +1,8 @@
-// features/loan/pages/add_loan_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/add_loan_form_controller.dart';
+import 'package:list/utils/nepali_date_utils.dart';
 
 class AddLoanPage extends StatelessWidget {
   final controller = Get.put(AddLoanFormController());
@@ -22,7 +22,7 @@ class AddLoanPage extends StatelessWidget {
           'Add New Loan',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.blue[700],
+        backgroundColor: Color.fromARGB(255, 204, 21, 27),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -125,6 +125,10 @@ class AddLoanPage extends StatelessWidget {
                         icon: Icons.calendar_today_outlined,
                       ),
 
+                      // Date Selection Section
+                      _buildSectionHeader('Loan Date', Icons.calendar_month),
+                      _buildNepaliDateSelection(),
+
                       const SizedBox(height: 24),
 
                       // Collateral Information Section
@@ -190,7 +194,12 @@ class AddLoanPage extends StatelessWidget {
                           Expanded(
                             flex: isDesktop ? 1 : 1,
                             child: ElevatedButton.icon(
-                              onPressed: () => controller.submitForm(),
+                              onPressed: () async {
+                                final success = await controller.submitForm();
+                                if (success) {
+                                  Navigator.pop(context);
+                                }
+                              },
                               icon: const Icon(Icons.add_circle_outline),
                               label: const Text('Add Loan'),
                               style: ElevatedButton.styleFrom(
@@ -219,6 +228,7 @@ class AddLoanPage extends StatelessWidget {
     );
   }
 
+  // ... (rest of your helper widget builders stay the same)
   Widget _buildSectionHeader(String title, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16, top: 8),
@@ -473,6 +483,162 @@ class AddLoanPage extends StatelessWidget {
           Text(
             ': $value',
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNepaliDateSelection() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Date Type Selection
+          Row(
+            children: [
+              Expanded(
+                child: Obx(
+                  () => RadioListTile<bool>(
+                    title: const Text('Today\'s Date'),
+                    value: false,
+                    groupValue: controller.useCustomDate.value,
+                    onChanged: (value) => controller.toggleCustomDate(value!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Obx(
+                  () => RadioListTile<bool>(
+                    title: const Text('Custom Date'),
+                    value: true,
+                    groupValue: controller.useCustomDate.value,
+                    onChanged: (value) => controller.toggleCustomDate(value!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Today's Date Display
+          Obx(
+            () => !controller.useCustomDate.value
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.today, color: Colors.green[700]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Today\'s Date',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green[800],
+                                ),
+                              ),
+                              Text(
+                                controller.selectedNepaliDate.value.format(),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : _buildCustomDateInput(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomDateInput() {
+    final TextEditingController dateController = TextEditingController();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.edit_calendar, color: Colors.blue[700]),
+              const SizedBox(width: 12),
+              Text(
+                'Custom Nepali Date',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue[800],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: dateController,
+            decoration: InputDecoration(
+              labelText: 'Enter date (e.g., 2082 Shrawan 10)',
+              hintText: '2082 Shrawan 10',
+              prefixIcon: Icon(Icons.calendar_today, color: Colors.blue[700]),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            onChanged: (value) {
+              controller.parseCustomNepaliDate(value);
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a date';
+              }
+              final parsed = NepaliDate.parse(value);
+              if (parsed == null) {
+                return 'Please enter a valid Nepali date (e.g., 2082 Shrawan 10)';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Available months: ${NepaliDate.getMonthNames().join(', ')}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blue[600],
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       ),
