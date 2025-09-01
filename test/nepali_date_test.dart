@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:list/utils/nepali_date_utils.dart';
-import 'package:nepali_utils/nepali_utils.dart';
+import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 void main() {
   group('NepaliDate Tests', () {
@@ -37,7 +37,7 @@ void main() {
       'should convert between Gregorian and Nepali dates (match nepali_utils)',
       () {
         final gregorianDate = DateTime(2025, 8, 19);
-        final expectedBack = NepaliDateTime.fromDateTime(
+        final expectedBack = picker.NepaliDateTime.fromDateTime(
           gregorianDate,
         ).toDateTime();
 
@@ -70,7 +70,7 @@ void main() {
 
     test('wrapper should match nepali_utils for a known date', () {
       final ad = DateTime(2025, 8, 19);
-      final ndt = NepaliDateTime.fromDateTime(ad);
+      final ndt = picker.NepaliDateTime.fromDateTime(ad);
       final wrapped = NepaliDate.fromGregorian(ad);
 
       expect(wrapped.year, ndt.year);
@@ -82,7 +82,7 @@ void main() {
       final ad = DateTime(2025, 8, 19);
       final wrapped = NepaliDate.fromGregorian(ad);
       final back = wrapped.toGregorian();
-      final expectedBack = NepaliDateTime.fromDateTime(ad).toDateTime();
+      final expectedBack = picker.NepaliDateTime.fromDateTime(ad).toDateTime();
 
       expect(back.year, expectedBack.year);
       expect(back.month, expectedBack.month);

@@ -73,14 +73,22 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: SingleChildScrollView(
             padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Status Header
-                LoanStatusHeader(loan: widget.loan),
+            child: GetBuilder<LoanDetailOperationsController>(
+              builder: (ops) {
+                final loan = ops.loan;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status Header
+                    LoanStatusHeader(loan: loan),
 
-                if (isDesktop) _buildDesktopLayout() else _buildMobileLayout(),
-              ],
+                    if (isDesktop)
+                      _buildDesktopLayout(loan)
+                    else
+                      _buildMobileLayout(loan),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -88,7 +96,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     );
   }
 
-  Widget _buildDesktopLayout() {
+  Widget _buildDesktopLayout(Loan loan) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -96,11 +104,11 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           flex: 2,
           child: Column(
             children: [
-              PersonalInfoCard(loan: widget.loan),
-              LoanInfoCard(loan: widget.loan),
-              JewelleryInfoCard(loan: widget.loan),
-              if (widget.loan.description.isNotEmpty)
-                DescriptionCard(loan: widget.loan),
+              PersonalInfoCard(loan: loan),
+              LoanInfoCard(loan: loan),
+              JewelleryInfoCard(loan: loan),
+              if (loan.description.isNotEmpty)
+                DescriptionCard(loan: loan),
             ],
           ),
         ),
@@ -109,20 +117,20 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           flex: 3,
           child: Column(
             children: [
-              FinancialSummaryCard(loan: widget.loan),
-              CustomerSummaryCard(loan: widget.loan),
+              FinancialSummaryCard(loan: loan),
+              CustomerSummaryCard(loan: loan),
               Obx(
                 () => UpdateReceivedAmountCard(
-                  loan: widget.loan,
+                  loan: loan,
                   controller: operationsController.receivedAmountController,
                   isProcessing: operationsController.isProcessingAction.value,
                   onUpdate: () => operationsController.updateReceivedAmount(),
                 ),
               ),
-              CustomDaysCalculationCard(loan: widget.loan),
-              AdditionalLoanCard(loan: widget.loan),
+              CustomDaysCalculationCard(loan: loan),
+              AdditionalLoanCard(loan: loan),
               DeleteLoanCard(
-                loan: widget.loan,
+                loan: loan,
                 onDelete: () =>
                     operationsController.showDeleteConfirmationDialog(),
               ),
@@ -133,28 +141,28 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     );
   }
 
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout(Loan loan) {
     return Column(
       children: [
-        PersonalInfoCard(loan: widget.loan),
-        LoanInfoCard(loan: widget.loan),
-        JewelleryInfoCard(loan: widget.loan),
-        FinancialSummaryCard(loan: widget.loan),
-        if (widget.loan.description.isNotEmpty)
-          DescriptionCard(loan: widget.loan),
-        CustomerSummaryCard(loan: widget.loan),
+        PersonalInfoCard(loan: loan),
+        LoanInfoCard(loan: loan),
+        JewelleryInfoCard(loan: loan),
+        FinancialSummaryCard(loan: loan),
+        if (loan.description.isNotEmpty)
+          DescriptionCard(loan: loan),
+        CustomerSummaryCard(loan: loan),
         Obx(
           () => UpdateReceivedAmountCard(
-            loan: widget.loan,
+            loan: loan,
             controller: operationsController.receivedAmountController,
             isProcessing: operationsController.isProcessingAction.value,
             onUpdate: () => operationsController.updateReceivedAmount(),
           ),
         ),
-        CustomDaysCalculationCard(loan: widget.loan),
-        AdditionalLoanCard(loan: widget.loan),
+        CustomDaysCalculationCard(loan: loan),
+        AdditionalLoanCard(loan: loan),
         DeleteLoanCard(
-          loan: widget.loan,
+          loan: loan,
           onDelete: () => operationsController.showDeleteConfirmationDialog(),
         ),
       ],

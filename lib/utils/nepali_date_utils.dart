@@ -1,4 +1,4 @@
-import 'package:nepali_utils/nepali_utils.dart';
+import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 class NepaliDate {
   final int year;
@@ -7,54 +7,27 @@ class NepaliDate {
 
   NepaliDate({required this.year, required this.month, required this.day});
 
+  // Create from Gregorian (AD) date using nepali_date_picker's NepaliDateTime
   factory NepaliDate.fromGregorian(DateTime gregorianDate) {
-    // Manual correction for known incorrect conversions
-    if (gregorianDate.year == 2025 &&
-        gregorianDate.month == 8 &&
-        gregorianDate.day == 19) {
-      return NepaliDate(year: 2082, month: 5, day: 3); // Bhadra 3, 2082
-    }
-
-    final ndt = NepaliDateTime.fromDateTime(gregorianDate);
+    final ndt = picker.NepaliDateTime.fromDateTime(gregorianDate);
     return NepaliDate(year: ndt.year, month: ndt.month, day: ndt.day);
   }
 
+  // Convert to Gregorian (AD) date using nepali_date_picker's NepaliDateTime
   DateTime toGregorian() {
-    // Manual correction for known incorrect conversions
-    if (year == 2082 && month == 5 && day == 3) {
-      return DateTime(2025, 8, 19); // Bhadra 3, 2082 → August 19, 2025
-    }
-
-    final ndt = NepaliDateTime(year, month, day);
+    final ndt = picker.NepaliDateTime(year, month, day);
     final ad = ndt.toDateTime();
-    // Normalize to Y-M-D to avoid timezone/dst off-by-one differences
+    // Normalize to Y-M-D (ignore time) to avoid timezone/dst off-by-one
     return DateTime(ad.year, ad.month, ad.day);
   }
 
+  // Today's Nepali date (computed in Nepal Standard Time to avoid off-by-one issues)
   factory NepaliDate.today() {
-    // The nepali_utils package has an incorrect conversion
-    // Today (August 19, 2025) should be Bhadra 3, 2082, not Bhadra 4
-    final now = DateTime.now();
-
-    // Manual correction for current date
-    if (now.year == 2025 && now.month == 8 && now.day == 19) {
-      return NepaliDate(year: 2082, month: 5, day: 3); // Bhadra 3, 2082
-    }
-
-    // For other dates, use the nepali_utils conversion but with manual corrections
-    final nowBs = NepaliDateTime.now();
-
-    // Apply manual corrections for known incorrect dates
-    if (nowBs.year == 2082 &&
-        nowBs.month == 5 &&
-        nowBs.day == 4 &&
-        now.year == 2025 &&
-        now.month == 8 &&
-        now.day == 19) {
-      return NepaliDate(year: 2082, month: 5, day: 3); // Correct to Bhadra 3
-    }
-
-    return NepaliDate(year: nowBs.year, month: nowBs.month, day: nowBs.day);
+    // Convert current UTC time to Nepal Standard Time (UTC+5:45) and strip time
+    final nepalNowUtc = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 45));
+    final nepalDateOnly = DateTime(nepalNowUtc.year, nepalNowUtc.month, nepalNowUtc.day);
+    final ndt = picker.NepaliDateTime.fromDateTime(nepalDateOnly);
+    return NepaliDate(year: ndt.year, month: ndt.month, day: ndt.day);
   }
 
   String format() {
@@ -82,7 +55,7 @@ class NepaliDate {
   }
 
   static List<String> getMonthNames() {
-    return [
+    return const [
       'Baisakh',
       'Jestha',
       'Asar',
@@ -99,8 +72,8 @@ class NepaliDate {
   }
 
   static int getCurrentYear() {
-    final now = NepaliDateTime.now();
-    return now.year;
+    // Derive from today's Nepali date in Nepal Standard Time
+    return NepaliDate.today().year;
   }
 
   static List<int> getYears() {
@@ -159,7 +132,7 @@ class NepaliDate {
     if (day < 1 || day > 32) return false;
 
     try {
-      NepaliDateTime(year, month, day);
+      picker.NepaliDateTime(year, month, day);
       return true;
     } catch (_) {
       return false;

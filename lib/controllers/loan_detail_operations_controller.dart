@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'dart:async';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
+import 'package:list/pages/loan_detail_page.dart';
 
 class LoanDetailOperationsController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
@@ -17,7 +18,8 @@ class LoanDetailOperationsController extends GetxController {
 
   void initializeLoan(Loan loan) {
     _loan = loan;
-    receivedAmountController.text = loan.amountReceived.toString();
+    // Treat the input as an additional amount to add, so start with empty field
+    receivedAmountController.text = '';
     _startPeriodicUpdates();
   }
 
@@ -31,30 +33,37 @@ class LoanDetailOperationsController extends GetxController {
   Future<bool> updateReceivedAmount() async {
     if (isProcessingAction.value) return false;
 
-    final newAmount = double.tryParse(receivedAmountController.text) ?? 0.0;
+    final addAmount = double.tryParse(receivedAmountController.text.trim()) ?? 0.0;
 
-    if (!_validateReceivedAmount(newAmount)) {
+    // For updates, treat input as an additional amount to add
+    if (addAmount <= 0) {
+      _showErrorSnackbar('Please enter a positive amount to add');
       return false;
     }
 
     isProcessingAction.value = true;
 
     try {
-      _loanController.updateReceivedAmountBySerial(
-        _loan.serialNumber,
-        newAmount,
-      );
+      // Record as a partial repayment with today's date
+      final now = DateTime.now();
+      _loanController.addPartialRepayment(_loan.serialNumber, addAmount, now);
 
-      // Update the local loan object
-      _loan.amountReceived = newAmount;
+      // Sync local reference with the updated loan from controller
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
 
       // Refresh loan calculations and force UI update
       _loanController.refreshLoanCalculations();
 
+      // Clear the input field after successful update
+      receivedAmountController.text = '';
+
       // Force immediate UI rebuild
       update();
 
-      _showSuccessSnackbar('Received amount updated successfully');
+      _showSuccessSnackbar('Amount added successfully');
       return true;
     } catch (e) {
       _showErrorSnackbar('Failed to update received amount');
@@ -83,7 +92,6 @@ class LoanDetailOperationsController extends GetxController {
       return false;
     }
   }
-
 
   void showDeleteConfirmationDialog() {
     Get.dialog(

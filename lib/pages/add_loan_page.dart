@@ -617,8 +617,8 @@ class AddLoanPage extends StatelessWidget {
               filled: true,
               fillColor: Colors.white,
             ),
-            onChanged: (value) {
-              controller.parseCustomNepaliDate(value);
+            onSaved: (value) {
+              controller.parseCustomNepaliDate(value!);
             },
             validator: (value) {
               if (value == null || value.isEmpty) {

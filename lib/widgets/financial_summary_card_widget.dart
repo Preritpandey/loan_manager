@@ -69,8 +69,8 @@ class FinancialSummaryCard extends StatelessWidget {
           ),
         ),
         InfoRow(
-          label: 'Total Due (P+I)',
-          value: 'NPR ${loan.immediateTotalDue.toStringAsFixed(2)}',
+          label: 'Total Due (P+I - Received)',
+          value: 'NPR ${loan.dueAmount.toStringAsFixed(2)}',
           color: Colors.blue[700],
           icon: Icons.calculate,
           isAmount: true,
