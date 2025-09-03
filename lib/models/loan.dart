@@ -85,25 +85,12 @@ class Loan extends HiveObject {
     );
   }
 
-  // Calculate effective days for interest calculation (for current status)
+  // Calculate effective days for interest calculation based on current date
+  // Applies minimum 30 days only when evaluating settlement as of now.
+  // For display purposes, this returns max(daysPassed, 30).
   int get effectiveDaysForInterest {
-    final daysPassed = this.daysPassed;
-
-    // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
-    if (duration <= 30) {
-      // For short loans, charge minimum 30 days or actual days if longer
-      return daysPassed <= 30 ? 30 : daysPassed;
-    }
-
-    // Rule 2: For loans longer than 30 days, use full duration if not yet matured,
-    // or actual days passed if overdue
-    if (daysPassed <= duration) {
-      // Loan not yet matured - use actual days passed (for current calculation)
-      return daysPassed;
-    } else {
-      // Loan is overdue - use actual days passed
-      return daysPassed;
-    }
+    final dp = daysPassed;
+    return dp < 30 ? 30 : dp;
   }
 
   // Calculate effective days for the agreed loan period (for total due calculation)
@@ -128,111 +115,145 @@ class Loan extends HiveObject {
     return agreedPeriodInterest;
   }
 
-  // Calculate current interest based on actual time passed (for current status display)
-  double get currentCalculatedInterest {
-    double currentBalance = amountGiven;
-    double totalInterest = 0.0;
-    int lastCalculationDay = 0;
-    final effectiveDays = effectiveDaysForInterest;
+  // Internal: compute ledger up to a given date considering partial repayments.
+  // Returns a map with keys: 'principal', 'accrued', 'interestPaid', 'extraInterestPaid'
+  Map<String, double> _ledgerUpTo(DateTime asOf) {
+    double principal = amountGiven;
+    double accrued = 0.0;
+    double interestPaid = 0.0; // interest actually paid (beyond principal)
+    double extraInterestPaid = 0.0; // interest paid that exceeds accrued (e.g., min 30-day enforcement)
 
     // Sort partial repayments by date
-    final sortedRepayments = List<PartialRepayment>.from(partialRepayments)
+    final events = List<PartialRepayment>.from(partialRepayments)
       ..sort((a, b) => a.date.compareTo(b.date));
 
-    // If no partial repayments, calculate simple interest for current period
-    if (sortedRepayments.isEmpty) {
-      return (amountGiven * dailyInterestRate * effectiveDays) / 100;
-    }
+    DateTime lastDate = date;
 
-    // Calculate interest for each period between repayments
-    for (final repayment in sortedRepayments) {
-      final daysSinceLastCalculation =
-          repayment.daysSinceLoan - lastCalculationDay;
-      if (daysSinceLastCalculation > 0) {
-        totalInterest +=
-            (currentBalance * dailyInterestRate * daysSinceLastCalculation) /
-            100;
+    for (final repayment in events.where((e) => !e.date.isAfter(asOf))) {
+      // Accrue interest from lastDate to repayment date on current principal
+      final days = repayment.date.difference(lastDate).inDays;
+      if (days > 0 && principal > 0) {
+        accrued += (principal * dailyInterestRate * days) / 100;
       }
-      currentBalance -= repayment.amount;
-      lastCalculationDay = repayment.daysSinceLoan;
+
+      double payment = repayment.amount;
+
+      // Apply payment to principal first
+      final principalPortion = payment >= principal ? principal : payment;
+      principal -= principalPortion;
+      payment -= principalPortion;
+
+      // If there's excess payment beyond principal, apply to accrued interest
+      if (payment > 0) {
+        final interestPortion = payment <= accrued ? payment : accrued;
+        accrued -= interestPortion;
+        interestPaid += interestPortion;
+        payment -= interestPortion;
+
+        // If there's still leftover after clearing accrued interest, count it as extra interest paid
+        if (payment > 0) {
+          extraInterestPaid += payment;
+          payment = 0.0;
+        }
+      }
+
+      // Move lastDate to this repayment date
+      lastDate = repayment.date;
     }
 
-    // Calculate interest for the remaining period
-    final remainingDays = effectiveDays - lastCalculationDay;
-    if (remainingDays > 0) {
-      totalInterest +=
-          (currentBalance * dailyInterestRate * remainingDays) / 100;
+    // Accrue interest from last event to asOf on remaining principal
+    final tailDays = asOf.difference(lastDate).inDays;
+    if (tailDays > 0 && principal > 0) {
+      accrued += (principal * dailyInterestRate * tailDays) / 100;
     }
 
-    return totalInterest;
+    return {
+      'principal': principal,
+      'accrued': accrued,
+      'interestPaid': interestPaid,
+      'extraInterestPaid': extraInterestPaid,
+    };
   }
 
-  // Calculate interest for the full agreed period (for total due calculation)
+  // Interest accrued up to now without enforcing the 30-day minimum settlement rule
+  double get accruedInterestNowNoMin {
+    final s = _ledgerUpTo(DateTime.now());
+    return s['accrued'] ?? 0.0;
+  }
+
+  // Total interest paid so far (portion of repayments that went to interest)
+  double get totalInterestPaidSoFar {
+    final s = _ledgerUpTo(DateTime.now());
+    return (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+  }
+
+  // Calculate current interest based on actual time passed and partial repayments
+  // with enforcement of minimum 30 days only when treated as settlement now.
+  double get currentCalculatedInterest {
+    final asOf = DateTime.now();
+    final s = _ledgerUpTo(asOf);
+    double accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+
+    // Enforce minimum 30 days on early settlement check
+    final daysSinceStart = asOf.difference(date).inDays;
+    if (daysSinceStart < 30) {
+      final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+      final shortfall = minInterest - (interestPaid + accrued);
+      if (shortfall > 0) accrued += shortfall;
+    }
+    return accrued;
+  }
+
+  // Calculate interest generated over the full agreed period, respecting partial repayments
+  // (sum of interest accrued regardless of whether it has been paid).
   double get agreedPeriodInterest {
-    double currentBalance = amountGiven;
-    double totalInterest = 0.0;
-    int lastCalculationDay = 0;
-    final effectiveDays = agreedPeriodDays;
-
-    // Sort partial repayments by date
-    final sortedRepayments = List<PartialRepayment>.from(partialRepayments)
-      ..sort((a, b) => a.date.compareTo(b.date));
-
-    // If no partial repayments, calculate simple interest for agreed period
-    if (sortedRepayments.isEmpty) {
-      return (amountGiven * dailyInterestRate * effectiveDays) / 100;
-    }
-
-    // Calculate interest for each period between repayments (limited to agreed period)
-    for (final repayment in sortedRepayments) {
-      if (repayment.daysSinceLoan > effectiveDays)
-        break; // Don't go beyond agreed period
-
-      final daysSinceLastCalculation =
-          repayment.daysSinceLoan - lastCalculationDay;
-      if (daysSinceLastCalculation > 0) {
-        totalInterest +=
-            (currentBalance * dailyInterestRate * daysSinceLastCalculation) /
-            100;
-      }
-      currentBalance -= repayment.amount;
-      lastCalculationDay = repayment.daysSinceLoan;
-    }
-
-    // Calculate interest for the remaining period (up to agreed period)
-    final remainingDays = effectiveDays - lastCalculationDay;
-    if (remainingDays > 0) {
-      totalInterest +=
-          (currentBalance * dailyInterestRate * remainingDays) / 100;
-    }
-
-    return totalInterest;
+    final endDate = date.add(Duration(days: agreedPeriodDays));
+    final s = _ledgerUpTo(endDate);
+    final accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0);
+    return interestPaid + accrued;
   }
 
   double get acquiredInterest {
-    // Use the new calculated interest method
-    return calculatedInterest;
+    // For compatibility, return current calculated interest (with min rule on settlement now)
+    return currentCalculatedInterest;
   }
 
+  // Current interest due as of now (principal + interest is total due),
+  // enforcing minimum 30 days if within first 30 days and treated as settlement.
   double get compoundInterest {
-    // Base interest calculation
-    double baseInterest = calculatedInterest;
+    final asOf = DateTime.now();
+    final s = _ledgerUpTo(asOf);
+    double accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
-    // If overdue, add additional interest on the total due amount
-    if (isOverdue) {
-      final totalDueAtDueDate = amountGiven + baseInterest;
-      final overdueDays = this.overdueDays;
-      final overdueInterestPerDay =
-          (totalDueAtDueDate * dailyInterestRate) / 100;
-      final overdueInterest = overdueInterestPerDay * overdueDays;
-      return baseInterest + overdueInterest;
+    final daysSinceStart = asOf.difference(date).inDays;
+    if (daysSinceStart < 30) {
+      final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+      final shortfall = minInterest - (interestPaid + accrued);
+      if (shortfall > 0) accrued += shortfall;
+    }
+    return accrued;
+  }
+
+  // Outstanding balance now (principal + interest up to now, enforcing min 30 days if < 30)
+  double get dueAmount {
+    final asOf = DateTime.now();
+    final s = _ledgerUpTo(asOf);
+    double principal = s['principal'] ?? 0.0;
+    double accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+
+    // Enforce 30-day minimum interest on settlement as of now
+    final daysSinceStart = asOf.difference(date).inDays;
+    if (daysSinceStart < 30) {
+      final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+      final shortfall = minInterest - (interestPaid + accrued);
+      if (shortfall > 0) accrued += shortfall;
     }
 
-    return baseInterest;
-  }
-
-  double get dueAmount {
-    return amountGiven + compoundInterest - amountReceived;
+    return principal + accrued;
   }
 
   bool get isOverdue {
@@ -254,12 +275,9 @@ class Loan extends HiveObject {
     return amountGiven + agreedPeriodInterest;
   }
 
+  // Overdue interest is not applied beyond daily simple interest per the new rules.
   double get overdueInterest {
-    if (!isOverdue) return 0.0;
-
-    final overdueDays = this.overdueDays;
-    final overdueInterestPerDay = (totalDueAtDueDate * dailyInterestRate) / 100;
-    return overdueInterestPerDay * overdueDays;
+    return 0.0;
   }
 
   // Additional getters for comprehensive display
@@ -280,7 +298,9 @@ class Loan extends HiveObject {
   }
 
   double get remainingPrincipal {
-    return amountGiven - amountReceived;
+    // Remaining principal based on ledger (not naive amountGiven - amountReceived)
+    final s = _ledgerUpTo(DateTime.now());
+    return s['principal'] ?? 0.0;
   }
 
   // New getter for immediate total due (principal + agreed period interest)
@@ -305,10 +325,10 @@ class Loan extends HiveObject {
     }
   }
 
-  // Get current balance after all partial repayments
+  // Get current balance (remaining principal) after all partial repayments using ledger
   double get currentBalance {
-    return amountGiven -
-        partialRepayments.fold(0.0, (sum, repayment) => sum + repayment.amount);
+    final s = _ledgerUpTo(DateTime.now());
+    return s['principal'] ?? 0.0;
   }
 
   // Calculate interest for custom number of days
@@ -319,6 +339,26 @@ class Loan extends HiveObject {
   // Calculate total amount for custom number of days
   double calculateCustomDaysTotal(int customDays) {
     return amountGiven + calculateCustomDaysInterest(customDays);
+  }
+
+  // Compute outstanding due at an arbitrary date.
+  // If forSettlement is true and asOf is within 30 days, enforce minimum 30-day interest.
+  double outstandingDueAt(DateTime asOf, {bool forSettlement = false}) {
+    final s = _ledgerUpTo(asOf);
+    double principal = s['principal'] ?? 0.0;
+    double accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+
+    if (forSettlement) {
+      final daysSinceStart = asOf.difference(date).inDays;
+      if (daysSinceStart < 30) {
+        final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+        final shortfall = minInterest - (interestPaid + accrued);
+        if (shortfall > 0) accrued += shortfall;
+      }
+    }
+
+    return principal + accrued;
   }
 
   // Get Nepali date

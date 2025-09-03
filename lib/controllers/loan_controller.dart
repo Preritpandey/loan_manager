@@ -105,7 +105,7 @@ class LoanController extends GetxController {
     }
   }
 
-  // New method to add partial repayment
+  // New method to add partial repayment with validation
   void addPartialRepayment(String serialNumber, double amount, DateTime date) {
     try {
       final loanIndex = loans.indexWhere(
@@ -116,8 +116,29 @@ class LoanController extends GetxController {
         return;
       }
 
+      if (amount <= 0) {
+        _showSnackbar('Error', 'Repayment amount must be positive');
+        return;
+      }
+
       final loan = loans[loanIndex];
-      loan.addPartialRepayment(amount, date);
+
+      // Compute outstanding due as of the repayment date, enforcing minimum 30-day interest if applicable
+      final outstanding = loan.outstandingDueAt(date, forSettlement: true);
+
+      // Do not allow overpayment; prevent negative balances
+      if (amount - outstanding > 0.005) { // small epsilon for floating point
+        _showSnackbar(
+          'Error',
+          'Repayment exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
+        );
+        return;
+      }
+
+      // If amount is slightly more due to rounding, clamp to outstanding
+      final adjustedAmount = amount > outstanding ? outstanding : amount;
+
+      loan.addPartialRepayment(adjustedAmount, date);
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
@@ -527,6 +548,20 @@ class LoanController extends GetxController {
     }
   }
 
+  // Helper: get outstanding balance (principal + accrued interest) as of now
+  double getOutstandingDue(String serialNumber) {
+    final loan = getLoanBySerial(serialNumber);
+    if (loan == null) return 0.0;
+    return loan.outstandingDueAt(DateTime.now(), forSettlement: true);
+  }
+
+  // Helper: get total interest paid so far for a loan
+  double getTotalInterestPaid(String serialNumber) {
+    final loan = getLoanBySerial(serialNumber);
+    if (loan == null) return 0.0;
+    return loan.totalInterestPaidSoFar;
+  }
+
   // Get loan with updated calculations
   Loan? getUpdatedLoan(String serialNumber) {
     try {
@@ -545,43 +580,22 @@ class LoanController extends GetxController {
     }
   }
 
-  // Calculate early repayment amount for a loan (updated for new rules)
+  // Calculate early repayment amount for a loan using ledger and min-30 rule
   double calculateEarlyRepaymentAmount(Loan loan) {
     try {
-      final daysPassed = loan.daysPassed;
-
-      // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
-      if (loan.duration <= 30) {
-        final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
-        final actualInterest =
-            (loan.amountGiven * loan.dailyInterestRate * effectiveDays) / 100;
-        return loan.amountGiven + actualInterest;
-      }
-
-      // Rule 2: For loans longer than 30 days, use actual days passed
-      final actualInterest =
-          (loan.amountGiven * loan.dailyInterestRate * daysPassed) / 100;
-      return loan.amountGiven + actualInterest;
+      return loan.outstandingDueAt(DateTime.now(), forSettlement: true);
     } catch (e) {
       print('Error calculating early repayment amount: $e');
-      return loan.immediateTotalDue;
+      return loan.dueAmount;
     }
   }
 
-  // Calculate early repayment interest for a loan (updated for new rules)
+  // Calculate early repayment interest (portion of outstanding that is interest)
   double calculateEarlyRepaymentInterest(Loan loan) {
     try {
-      final daysPassed = loan.daysPassed;
-
-      // Rule 1: Minimum one-month interest (30 days) for loans up to 30 days
-      if (loan.duration <= 30) {
-        final effectiveDays = daysPassed <= 30 ? 30 : daysPassed;
-        return (loan.amountGiven * loan.dailyInterestRate * effectiveDays) /
-            100;
-      }
-
-      // Rule 2: For loans longer than 30 days, use actual days passed
-      return (loan.amountGiven * loan.dailyInterestRate * daysPassed) / 100;
+      final asOf = DateTime.now();
+      // Interest due is compoundInterest under our model
+      return loan.compoundInterest;
     } catch (e) {
       print('Error calculating early repayment interest: $e');
       return loan.agreedPeriodInterest;
@@ -591,8 +605,7 @@ class LoanController extends GetxController {
   // Calculate early repayment due amount for a loan
   double calculateEarlyRepaymentDueAmount(Loan loan) {
     try {
-      final earlyRepaymentAmount = calculateEarlyRepaymentAmount(loan);
-      return earlyRepaymentAmount - loan.amountReceived;
+      return calculateEarlyRepaymentAmount(loan);
     } catch (e) {
       print('Error calculating early repayment due amount: $e');
       return loan.dueAmount;

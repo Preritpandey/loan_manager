@@ -41,6 +41,15 @@ class LoanDetailOperationsController extends GetxController {
       return false;
     }
 
+    // Validate against outstanding due to prevent overpayment
+    final outstanding = _loanController.getOutstandingDue(_loan.serialNumber);
+    if (addAmount - outstanding > 0.005) {
+      _showErrorSnackbar(
+        'Amount exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
+      );
+      return false;
+    }
+
     isProcessingAction.value = true;
 
     try {
@@ -63,7 +72,7 @@ class LoanDetailOperationsController extends GetxController {
       // Force immediate UI rebuild
       update();
 
-      _showSuccessSnackbar('Amount added successfully');
+      _showSuccessSnackbar('Repayment added successfully');
       return true;
     } catch (e) {
       _showErrorSnackbar('Failed to update received amount');
