@@ -22,6 +22,7 @@ class LoanTile extends StatelessWidget {
           // Refresh the loans list when returning from detail page
           final controller = Get.find<LoanController>();
           controller.refreshLoans();
+          controller.refreshLoanCalculations();
         }),
         child: ListTile(
           title: Row(

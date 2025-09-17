@@ -112,22 +112,17 @@ class AddLoanPage extends StatelessWidget {
                           prefix: '₹',
                         ),
                         _buildTextField(
-                          'Interest Rate (%)',
+                          'Interest Rate (% per year)',
                           'interestRate',
                           isNumber: true,
                           icon: Icons.percent,
                         ),
                       ]),
-                      _buildTextField(
-                        'Duration (days)',
-                        'duration',
-                        isNumber: true,
-                        icon: Icons.calendar_today_outlined,
-                      ),
+                      // Duration field removed - daily interest will be calculated from yearly rate ÷ 365
 
                       // Date Selection Section
                       _buildSectionHeader('Loan Date', Icons.calendar_month),
-                      _buildNepaliDateSelection(),
+                      _buildNepaliDateSelection(context),
 
                       const SizedBox(height: 24),
 
@@ -489,7 +484,7 @@ class AddLoanPage extends StatelessWidget {
     );
   }
 
-  Widget _buildNepaliDateSelection() {
+  Widget _buildNepaliDateSelection(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -498,17 +493,17 @@ class AddLoanPage extends StatelessWidget {
           // Date Type Selection
           Row(
             children: [
-              Expanded(
-                child: Obx(
-                  () => RadioListTile<bool>(
-                    title: const Text('Today\'s Date'),
-                    value: false,
-                    groupValue: controller.useCustomDate.value,
-                    onChanged: (value) => controller.toggleCustomDate(value!),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ),
+              // Expanded(
+              //   child: Obx(
+              //     () => RadioListTile<bool>(
+              //       title: const Text('Today\'s Date'),
+              //       value: false,
+              //       groupValue: controller.useCustomDate.value,
+              //       onChanged: (value) => controller.toggleCustomDate(value!),
+              //       contentPadding: EdgeInsets.zero,
+              //     ),
+              //   ),
+              // ),
               Expanded(
                 child: Obx(
                   () => RadioListTile<bool>(
@@ -524,54 +519,53 @@ class AddLoanPage extends StatelessWidget {
           ),
 
           // Today's Date Display
-          Obx(
-            () => !controller.useCustomDate.value
-                ? Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green[300]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.today, color: Colors.green[700]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Today\'s Date',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.green[800],
-                                ),
-                              ),
-                              Text(
-                                controller.selectedNepaliDate.value.format(),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : _buildCustomDateInput(),
-          ),
+          // Obx(
+          //   () => !controller.useCustomDate.value
+          //       ? Container(
+          //           padding: const EdgeInsets.all(16),
+          //           decoration: BoxDecoration(
+          //             color: Colors.green[50],
+          //             borderRadius: BorderRadius.circular(12),
+          //             border: Border.all(color: Colors.green[300]!),
+          //           ),
+          //           child: Row(
+          //             children: [
+          //               Icon(Icons.today, color: Colors.green[700]),
+          //               const SizedBox(width: 12),
+          //               Expanded(
+          //                 child: Column(
+          //                   crossAxisAlignment: CrossAxisAlignment.start,
+          //                   children: [
+          //                     Text(
+          //                       'Today\'s Date',
+          //                       style: TextStyle(
+          //                         fontWeight: FontWeight.w600,
+          //                         color: Colors.green[800],
+          //                       ),
+          //                     ),
+          //                     Text(
+          //                       controller.selectedNepaliDate.value.format(),
+          //                       style: TextStyle(
+          //                         fontSize: 16,
+          //                         fontWeight: FontWeight.bold,
+          //                         color: Colors.green[700],
+          //                       ),
+          //                     ),
+          //                   ],
+          //                 ),
+          //               ),
+          //             ],
+          //           ),
+          //         )
+          //       : _buildCustomDateInput(context),
+          // ),
+          _buildCustomDateInput(context),
         ],
       ),
     );
   }
 
-  Widget _buildCustomDateInput() {
-    final TextEditingController dateController = TextEditingController();
-
+  Widget _buildCustomDateInput(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -585,55 +579,70 @@ class AddLoanPage extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.edit_calendar, color: Colors.blue[700]),
-              const SizedBox(width: 12),
-              Text(
-                'Custom Nepali Date',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue[800],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Custom Nepali Date',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue[800],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  softWrap: false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                fit: FlexFit.loose,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final selected = await _showNepaliDatePicker(context);
+                    if (selected != null) {
+                      controller.setNepaliDate(selected);
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month, size: 16),
+                  label: const Text('Pick Date'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: dateController,
-            decoration: InputDecoration(
-              labelText: 'Enter date (e.g., 2082 Shrawan 10)',
-              hintText: '2082 Shrawan 10',
-              prefixIcon: Icon(Icons.calendar_today, color: Colors.blue[700]),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[300]!),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.white,
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
             ),
-            onSaved: (value) {
-              controller.parseCustomNepaliDate(value!);
-            },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a date';
-              }
-              final parsed = NepaliDate.parse(value);
-              if (parsed == null) {
-                return 'Please enter a valid Nepali date (e.g., 2082 Shrawan 10)';
-              }
-              return null;
-            },
+            child: Obx(
+              () => Row(
+                children: [
+                  const Icon(Icons.today, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    controller.selectedNepaliDate.value.format(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Available months: ${NepaliDate.getMonthNames().join(', ')}',
+            'Tap Pick Date to select using Nepali Date Picker',
             style: TextStyle(
               fontSize: 12,
               color: Colors.blue[600],
@@ -643,5 +652,184 @@ class AddLoanPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<NepaliDate?> _showNepaliDatePicker(BuildContext context) async {
+    final today = NepaliDate.today();
+    final years = NepaliDate.getYears();
+
+    int selectedYear = controller.selectedNepaliDate.value.year;
+    int selectedMonth = controller.selectedNepaliDate.value.month;
+    int selectedDay = controller.selectedNepaliDate.value.day;
+
+    NepaliDate? result;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final screenW = MediaQuery.of(ctx).size.width;
+            final maxW = screenW * 0.9;
+            final bool narrow = maxW < 360;
+            final double dialogW = narrow ? maxW : 360;
+
+            Widget year = DropdownButton<int>(
+              value: selectedYear,
+              isExpanded: true,
+              items: years
+                  .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => selectedYear = v);
+                }
+              },
+            );
+
+            Widget month = DropdownButton<int>(
+              value: selectedMonth,
+              isExpanded: true,
+              items: List.generate(12, (i) => i + 1)
+                  .map(
+                    (m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(NepaliDate.getMonthNames()[m - 1]),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => selectedMonth = v);
+                }
+              },
+            );
+
+            Widget day = DropdownButton<int>(
+              value: selectedDay,
+              isExpanded: true,
+              items: List.generate(32, (i) => i + 1)
+                  .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => selectedDay = v);
+                }
+              },
+            );
+
+            final isValid = NepaliDate.isValid(
+              selectedYear,
+              selectedMonth,
+              selectedDay,
+            );
+            final previewText =
+                '$selectedYear ${NepaliDate.getMonthNames()[selectedMonth - 1]} $selectedDay';
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Text('Select Nepali Date'),
+              content: SizedBox(
+                width: dialogW,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!narrow)
+                      Row(
+                        children: [
+                          Expanded(child: year),
+                          const SizedBox(width: 8),
+                          Expanded(child: month),
+                          const SizedBox(width: 8),
+                          Expanded(child: day),
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          year,
+                          const SizedBox(height: 8),
+                          month,
+                          const SizedBox(height: 8),
+                          day,
+                        ],
+                      ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isValid ? Colors.green[50] : Colors.red[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isValid
+                              ? Colors.green[200]!
+                              : Colors.red[200]!,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.event,
+                            color: isValid
+                                ? Colors.green[700]
+                                : Colors.red[700],
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              previewText,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isValid
+                                    ? Colors.green[800]
+                                    : Colors.red[800],
+                              ),
+                            ),
+                          ),
+                          if (!isValid)
+                            const Text(
+                              'Invalid',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.red,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isValid
+                      ? () {
+                          result = NepaliDate(
+                            year: selectedYear,
+                            month: selectedMonth,
+                            day: selectedDay,
+                          );
+                          Navigator.of(ctx).pop();
+                        }
+                      : null,
+                  child: const Text('Select'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return result;
   }
 }

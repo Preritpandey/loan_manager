@@ -29,6 +29,14 @@ class FinancialSummaryCard extends StatelessWidget {
           icon: Icons.trending_up,
           isAmount: true,
         ),
+        InfoRow(
+          label: 'Planned Total (P + I for duration)',
+          value:
+              'NPR ${(loan.amountGiven + loan.agreedPeriodInterest).toStringAsFixed(2)}',
+          color: Colors.blue[900],
+          icon: Icons.summarize,
+          isAmount: true,
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(12),
@@ -63,7 +71,10 @@ class FinancialSummaryCard extends StatelessWidget {
               ),
               Text(
                 'Interest = (${loan.amountGiven.toStringAsFixed(2)} × ${loan.dailyInterestRate.toStringAsFixed(4)}% × ${loan.agreedPeriodDays}) / 100',
-                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),

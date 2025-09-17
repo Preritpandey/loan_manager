@@ -2,8 +2,7 @@
 // import 'package:get/get.dart';
 // import 'package:list/controllers/loan_controller.dart';
 // import 'package:list/models/loan.dart';
-// import 'package:list/pages/loan_detail_page.dart';
-
+//
 // class AddAdditionalLoanPage extends StatefulWidget {
 //   final Loan existingLoan;
 
@@ -324,7 +323,6 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
-import 'package:list/pages/loan_detail_page.dart';
 
 class AddAdditionalLoanPage extends StatefulWidget {
   final Loan existingLoan;
@@ -667,8 +665,11 @@ class _AddAdditionalLoanPageState extends State<AddAdditionalLoanPage> {
         colorText: Colors.white,
       );
 
-      // Navigate to the loan details page of the newly created loan
+      // Navigate back and refresh the loan detail page
       Get.back();
+
+      // Force refresh of loan calculations to update totals
+      controller.refreshLoanCalculations();
     }
   }
 }

@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 import 'dart:async';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
-import 'package:list/pages/loan_detail_page.dart';
 
 class LoanDetailOperationsController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
@@ -33,7 +32,8 @@ class LoanDetailOperationsController extends GetxController {
   Future<bool> updateReceivedAmount() async {
     if (isProcessingAction.value) return false;
 
-    final addAmount = double.tryParse(receivedAmountController.text.trim()) ?? 0.0;
+    final addAmount =
+        double.tryParse(receivedAmountController.text.trim()) ?? 0.0;
 
     // For updates, treat input as an additional amount to add
     if (addAmount <= 0) {
@@ -80,14 +80,6 @@ class LoanDetailOperationsController extends GetxController {
     } finally {
       isProcessingAction.value = false;
     }
-  }
-
-  bool _validateReceivedAmount(double amount) {
-    if (amount < 0) {
-      _showErrorSnackbar('Received amount cannot be negative');
-      return false;
-    }
-    return true;
   }
 
   Future<bool> deleteLoan() async {
@@ -200,6 +192,339 @@ class LoanDetailOperationsController extends GetxController {
       });
     } catch (e) {
       print('Error showing snackbar: $e');
+    }
+  }
+
+  // New payment methods for the updated system
+
+  Future<bool> addInterestOnlyPayment(double interestAmount, int days) async {
+    if (isProcessingAction.value) return false;
+
+    if (interestAmount <= 0) {
+      _showErrorSnackbar('Interest amount must be positive');
+      return false;
+    }
+
+    if (days <= 0) {
+      _showErrorSnackbar('Number of days must be positive');
+      return false;
+    }
+
+    isProcessingAction.value = true;
+
+    try {
+      // Apply the interest collection immediately so UI and due update right away
+      // We still calculate the amount for the selected days, but record it at 'now'
+      final repaymentDate = DateTime.now();
+
+      // Record interest-only repayment; ledger applies to interest first so principal stays intact
+      _loanController.addPartialRepayment(
+        _loan.serialNumber,
+        interestAmount,
+        repaymentDate,
+      );
+
+      // Sync local reference with the updated loan from controller
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+
+      // Refresh loan calculations and force UI update
+      _loanController.refreshLoanCalculations();
+      update();
+
+      _showSuccessSnackbar('Interest payment recorded successfully');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record interest payment');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  Future<bool> addPrincipalOnlyPayment(double principalAmount) async {
+    if (isProcessingAction.value) return false;
+
+    if (principalAmount <= 0) {
+      _showErrorSnackbar('Principal amount must be positive');
+      return false;
+    }
+
+    final remainingPrincipal = _loan.remainingPrincipal;
+    if (principalAmount > remainingPrincipal) {
+      _showErrorSnackbar('Amount exceeds remaining principal');
+      return false;
+    }
+
+    isProcessingAction.value = true;
+
+    try {
+      // Post at last event date so repayment goes straight to principal (no interim interest)
+      final start = _loan.lastEventDate;
+
+      // Add partial repayment - the loan's ledger system will handle principal reduction
+      _loanController.addPartialRepayment(
+        _loan.serialNumber,
+        principalAmount,
+        start,
+      );
+
+      // Sync local reference with the updated loan from controller
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+
+      // Refresh loan calculations and force UI update
+      _loanController.refreshLoanCalculations();
+      update();
+
+      _showSuccessSnackbar('Principal payment recorded successfully');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record principal payment');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  Future<bool> addPrincipalRepaymentWithInterest(
+    double principalAmount,
+    int days,
+  ) async {
+    if (isProcessingAction.value) return false;
+
+    if (principalAmount <= 0) {
+      _showErrorSnackbar('Principal amount must be positive');
+      return false;
+    }
+
+    if (days < 0) {
+      _showErrorSnackbar('Number of days cannot be negative');
+      return false;
+    }
+
+    final remainingPrincipal = _loan.remainingPrincipal;
+    if (principalAmount > remainingPrincipal + 0.0001) {
+      _showErrorSnackbar('Amount exceeds remaining principal');
+      return false;
+    }
+
+    isProcessingAction.value = true;
+
+    try {
+      // Start from last event date for accurate accrual segments
+      final start = _loan.lastEventDate;
+
+      // 1) Apply principal repayment at start
+      _loanController.addPartialRepayment(
+        _loan.serialNumber,
+        principalAmount,
+        start,
+      );
+
+      // Refresh loan to get updated remaining principal
+      final afterPrincipal = _loanController.getLoanBySerial(
+        _loan.serialNumber,
+      );
+      if (afterPrincipal != null) {
+        _loan = afterPrincipal;
+      }
+
+      if (days > 0) {
+        // 2) Compute interest for chosen days on new remaining principal
+        final principalBase = _loan.remainingPrincipal;
+        final interestAmount =
+            (principalBase * _loan.dailyInterestRate * days) / 100.0;
+
+        // 3) Collect that interest immediately so UI reflects payment now
+        _loanController.addPartialRepayment(
+          _loan.serialNumber,
+          interestAmount,
+          DateTime.now(),
+        );
+
+        // Reload
+        final refreshed2 = _loanController.getLoanBySerial(_loan.serialNumber);
+        if (refreshed2 != null) {
+          _loan = refreshed2;
+        }
+      }
+
+      _loanController.refreshLoanCalculations();
+      update();
+      _showSuccessSnackbar(
+        'Principal repayment recorded' +
+            (days > 0 ? ' with $days days interest' : ''),
+      );
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record principal repayment with interest');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  Future<bool> addFullRepayment(double totalAmount) async {
+    if (isProcessingAction.value) return false;
+
+    if (totalAmount <= 0) {
+      _showErrorSnackbar('Repayment amount must be positive');
+      return false;
+    }
+
+    final totalDue = _loan.dueAmount;
+    if (totalAmount < totalDue - 0.01) {
+      // Allow small rounding differences
+      _showErrorSnackbar('Amount is less than total due');
+      return false;
+    }
+
+    isProcessingAction.value = true;
+
+    try {
+      final now = DateTime.now();
+
+      // Add full repayment as settlement to enforce min 30-day rule
+      _loanController.addPartialRepaymentForSettlement(
+        _loan.serialNumber,
+        totalDue,
+        now,
+      );
+
+      // Sync local reference with the updated loan from controller
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+
+      // Refresh loan calculations and force UI update
+      _loanController.refreshLoanCalculations();
+      update();
+
+      _showSuccessSnackbar('Full repayment recorded successfully');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record full repayment');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  // New: top up existing loan (increase principal)
+  Future<bool> addTopUp(double amount) async {
+    if (isProcessingAction.value) return false;
+    if (amount <= 0) {
+      _showErrorSnackbar('Top-up amount must be positive');
+      return false;
+    }
+    isProcessingAction.value = true;
+    try {
+      _loanController.addTopUp(_loan.serialNumber, amount, DateTime.now());
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+      _loanController.refreshLoanCalculations();
+      update();
+      _showSuccessSnackbar('Top-up of NPR ${amount.toStringAsFixed(2)} added');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to add top-up');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  // New: overall payment - apply any amount now; will go to interest first, then principal
+  Future<bool> addOverallPayment(double amount) async {
+    if (isProcessingAction.value) return false;
+    if (amount <= 0) {
+      _showErrorSnackbar('Payment amount must be positive');
+      return false;
+    }
+    // Prevent overpayment beyond settlement outstanding due now (min-30 enforced)
+    final outstanding = _loanController.getOutstandingDueForSettlement(
+      _loan.serialNumber,
+    );
+    if (amount - outstanding > 0.005) {
+      _showErrorSnackbar(
+        'Amount exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
+      );
+      return false;
+    }
+    isProcessingAction.value = true;
+    try {
+      _loanController.addPartialRepaymentForSettlement(
+        _loan.serialNumber,
+        amount,
+        DateTime.now(),
+      );
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+      _loanController.refreshLoanCalculations();
+      update();
+      _showSuccessSnackbar('Payment recorded successfully');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record payment');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
+    }
+  }
+
+  Future<bool> addCustomDaysPayment(double interestAmount, int days) async {
+    if (isProcessingAction.value) return false;
+
+    if (interestAmount <= 0) {
+      _showErrorSnackbar('Interest amount must be positive');
+      return false;
+    }
+
+    if (days <= 0) {
+      _showErrorSnackbar('Number of days must be positive');
+      return false;
+    }
+
+    isProcessingAction.value = true;
+
+    try {
+      // Record the interest payment immediately so UI reflects the change now
+      final repaymentDate = DateTime.now();
+
+      // Add the interest payment for custom days
+      _loanController.addPartialRepayment(
+        _loan.serialNumber,
+        interestAmount,
+        repaymentDate,
+      );
+
+      // Sync local reference with the updated loan from controller
+      final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
+      if (refreshed != null) {
+        _loan = refreshed;
+      }
+
+      // Refresh loan calculations and force UI update
+      _loanController.refreshLoanCalculations();
+      update();
+
+      _showSuccessSnackbar('Custom interest payment recorded successfully');
+      return true;
+    } catch (e) {
+      _showErrorSnackbar('Failed to record custom interest payment');
+      return false;
+    } finally {
+      isProcessingAction.value = false;
     }
   }
 

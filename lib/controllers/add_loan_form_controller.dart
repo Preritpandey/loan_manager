@@ -122,7 +122,6 @@ class AddLoanFormController extends GetxController {
       'address',
       'amountGiven',
       'interestRate',
-      'duration',
       'type',
       'jewelleryName',
       'serialNumber',
@@ -138,22 +137,22 @@ class AddLoanFormController extends GetxController {
 
   Loan? _createLoanFromFormData() {
     try {
-      final durationStr = formData['duration']?.toString() ?? '';
       final interestStr = formData['interestRate']?.toString() ?? '';
       final amountStr = formData['amountGiven']?.toString() ?? '';
 
-      final duration = int.tryParse(durationStr);
       final interestRate = double.tryParse(interestStr);
       final amountGiven = double.tryParse(amountStr);
 
-      if (duration == null || interestRate == null || amountGiven == null) {
+      if (interestRate == null || amountGiven == null) {
         return null;
       }
 
+      // Use a default duration of 365 days (1 year) since we're now calculating daily interest
+      // The actual interest calculation will be based on actual days passed
       return Loan.withNepaliDate(
         name: formData['name'],
         nepaliDate: selectedNepaliDate.value,
-        duration: duration,
+        duration: 365, // Default duration - actual interest calculated daily
         interestRate: interestRate,
         type: formData['type'],
         jewelleryName: formData['jewelleryName'],

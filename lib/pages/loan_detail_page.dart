@@ -8,9 +8,8 @@ import 'package:list/widgets/loan_info_card_widget.dart';
 import 'package:list/widgets/jewellery_info_card_widget.dart';
 import 'package:list/widgets/financial_summary_card_widget.dart';
 import 'package:list/widgets/description_card_widget.dart';
-import 'package:list/widgets/update_received_amount_card_widget.dart';
-import 'package:list/widgets/custom_days_calculation_card_widget.dart';
-import 'package:list/widgets/additional_loan_card_widget.dart';
+import 'package:list/widgets/payment_options_card_widget.dart';
+import 'package:list/widgets/loan_statement_tiles_widget.dart';
 import 'package:list/widgets/customer_summary_card_widget.dart';
 import 'package:list/widgets/delete_loan_card_widget.dart';
 
@@ -107,8 +106,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               PersonalInfoCard(loan: loan),
               LoanInfoCard(loan: loan),
               JewelleryInfoCard(loan: loan),
-              if (loan.description.isNotEmpty)
-                DescriptionCard(loan: loan),
+              if (loan.description.isNotEmpty) DescriptionCard(loan: loan),
             ],
           ),
         ),
@@ -118,17 +116,11 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           child: Column(
             children: [
               FinancialSummaryCard(loan: loan),
+              const SizedBox(height: 8),
+              LoanStatementTiles(loan: loan),
+              const SizedBox(height: 8),
               CustomerSummaryCard(loan: loan),
-              Obx(
-                () => UpdateReceivedAmountCard(
-                  loan: loan,
-                  controller: operationsController.receivedAmountController,
-                  isProcessing: operationsController.isProcessingAction.value,
-                  onUpdate: () => operationsController.updateReceivedAmount(),
-                ),
-              ),
-              CustomDaysCalculationCard(loan: loan),
-              AdditionalLoanCard(loan: loan),
+              PaymentOptionsCard(loan: loan),
               DeleteLoanCard(
                 loan: loan,
                 onDelete: () =>
@@ -148,19 +140,12 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         LoanInfoCard(loan: loan),
         JewelleryInfoCard(loan: loan),
         FinancialSummaryCard(loan: loan),
-        if (loan.description.isNotEmpty)
-          DescriptionCard(loan: loan),
+        const SizedBox(height: 8),
+        LoanStatementTiles(loan: loan),
+        const SizedBox(height: 8),
+        if (loan.description.isNotEmpty) DescriptionCard(loan: loan),
         CustomerSummaryCard(loan: loan),
-        Obx(
-          () => UpdateReceivedAmountCard(
-            loan: loan,
-            controller: operationsController.receivedAmountController,
-            isProcessing: operationsController.isProcessingAction.value,
-            onUpdate: () => operationsController.updateReceivedAmount(),
-          ),
-        ),
-        CustomDaysCalculationCard(loan: loan),
-        AdditionalLoanCard(loan: loan),
+        PaymentOptionsCard(loan: loan),
         DeleteLoanCard(
           loan: loan,
           onDelete: () => operationsController.showDeleteConfirmationDialog(),

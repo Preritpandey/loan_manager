@@ -24,8 +24,10 @@ class NepaliDate {
   // Today's Nepali date (computed in Nepal Standard Time to avoid off-by-one issues)
   factory NepaliDate.today() {
     // Convert current UTC time to Nepal Standard Time (UTC+5:45) and strip time
-    final nepalNowUtc = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 45));
-    final nepalDateOnly = DateTime(nepalNowUtc.year, nepalNowUtc.month, nepalNowUtc.day);
+    final nepalNow = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 45),
+    );
+    final nepalDateOnly = DateTime(nepalNow.year, nepalNow.month, nepalNow.day);
     final ndt = picker.NepaliDateTime.fromDateTime(nepalDateOnly);
     return NepaliDate(year: ndt.year, month: ndt.month, day: ndt.day);
   }
@@ -77,8 +79,15 @@ class NepaliDate {
   }
 
   static List<int> getYears() {
+    // Include previous 3 years and next 7 years (total 11),
+    // so if current is 2082, list will include 2079, 2080, 2081 as well.
     final currentYear = getCurrentYear();
-    return List.generate(11, (index) => currentYear + index);
+    const pastYears = 3;
+    const futureYears = 7; // keep total count 11 like before
+    return List.generate(
+      pastYears + futureYears + 1,
+      (index) => currentYear - pastYears + index,
+    );
   }
 
   static int daysBetween(NepaliDate start, NepaliDate end) {

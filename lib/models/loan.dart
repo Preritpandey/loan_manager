@@ -138,19 +138,26 @@ class Loan extends HiveObject {
 
       double payment = repayment.amount;
 
-      // Apply payment to principal first
-      final principalPortion = payment >= principal ? principal : payment;
-      principal -= principalPortion;
-      payment -= principalPortion;
-
-      // If there's excess payment beyond principal, apply to accrued interest
-      if (payment > 0) {
+      if (payment < 0) {
+        // Negative payment represents top-up (additional disbursement)
+        // Increase principal by the absolute value. Do not change accrued/interestPaid.
+        principal += (-payment);
+        payment = 0.0;
+      } else if (payment > 0) {
+        // Apply payment to accrued interest first
         final interestPortion = payment <= accrued ? payment : accrued;
         accrued -= interestPortion;
         interestPaid += interestPortion;
         payment -= interestPortion;
 
-        // If there's still leftover after clearing accrued interest, count it as extra interest paid
+        // Then apply remaining payment to principal
+        if (payment > 0) {
+          final principalPortion = payment >= principal ? principal : payment;
+          principal -= principalPortion;
+          payment -= principalPortion;
+        }
+
+        // If there's still leftover after clearing both, count it as extra interest paid
         if (payment > 0) {
           extraInterestPaid += payment;
           payment = 0.0;
@@ -325,6 +332,22 @@ class Loan extends HiveObject {
     }
   }
 
+  // Method to add a top-up (additional disbursement) recorded as a negative ledger event
+  void addTopUp(double amount, DateTime disbursementDate) {
+    final daysSinceLoan = disbursementDate.difference(date).inDays;
+    partialRepayments.add(
+      PartialRepayment(
+        amount: -amount, // negative to denote disbursement
+        date: disbursementDate,
+        daysSinceLoan: daysSinceLoan,
+      ),
+    );
+    // Do NOT change amountReceived for top-ups
+    if (isInBox) {
+      save();
+    }
+  }
+
   // Get current balance (remaining principal) after all partial repayments using ledger
   double get currentBalance {
     final s = _ledgerUpTo(DateTime.now());
@@ -333,12 +356,14 @@ class Loan extends HiveObject {
 
   // Calculate interest for custom number of days
   double calculateCustomDaysInterest(int customDays) {
-    return (amountGiven * dailyInterestRate * customDays) / 100;
+    // Use outstanding principal as base to avoid charging interest on repaid amounts
+    final principalBase = remainingPrincipal;
+    return (principalBase * dailyInterestRate * customDays) / 100;
   }
 
   // Calculate total amount for custom number of days
   double calculateCustomDaysTotal(int customDays) {
-    return amountGiven + calculateCustomDaysInterest(customDays);
+    return remainingPrincipal + calculateCustomDaysInterest(customDays);
   }
 
   // Compute outstanding due at an arbitrary date.
@@ -359,6 +384,14 @@ class Loan extends HiveObject {
     }
 
     return principal + accrued;
+  }
+
+  // Get last event date (loan start or last repayment)
+  DateTime get lastEventDate {
+    if (partialRepayments.isEmpty) return date;
+    final events = List<PartialRepayment>.from(partialRepayments)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    return events.last.date;
   }
 
   // Get Nepali date

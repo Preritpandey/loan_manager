@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
-import 'package:intl/intl.dart';
 
 class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
@@ -123,11 +122,12 @@ class LoanController extends GetxController {
 
       final loan = loans[loanIndex];
 
-      // Compute outstanding due as of the repayment date, enforcing minimum 30-day interest if applicable
-      final outstanding = loan.outstandingDueAt(date, forSettlement: true);
+      // Compute outstanding due as of the repayment date (no settlement enforcement)
+      final outstanding = loan.outstandingDueAt(date, forSettlement: false);
 
       // Do not allow overpayment; prevent negative balances
-      if (amount - outstanding > 0.005) { // small epsilon for floating point
+      if (amount - outstanding > 0.005) {
+        // small epsilon for floating point
         _showSnackbar(
           'Error',
           'Repayment exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
@@ -145,6 +145,78 @@ class LoanController extends GetxController {
     } catch (e) {
       print('Error adding partial repayment: $e');
       _showSnackbar('Error', 'Failed to add partial repayment');
+    }
+  }
+
+  // New: add partial repayment using settlement rules (min 30-day enforcement)
+  void addPartialRepaymentForSettlement(
+    String serialNumber,
+    double amount,
+    DateTime date,
+  ) {
+    try {
+      final loanIndex = loans.indexWhere(
+        (loan) => loan.serialNumber == serialNumber,
+      );
+      if (loanIndex == -1) {
+        _showSnackbar('Error', 'Loan not found');
+        return;
+      }
+
+      if (amount <= 0) {
+        _showSnackbar('Error', 'Repayment amount must be positive');
+        return;
+      }
+
+      final loan = loans[loanIndex];
+
+      // Settlement due allows min-30 enforcement
+      final outstanding = loan.outstandingDueAt(date, forSettlement: true);
+
+      // Do not allow overpayment; prevent negative balances
+      if (amount - outstanding > 0.005) {
+        _showSnackbar(
+          'Error',
+          'Repayment exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
+        );
+        return;
+      }
+
+      final adjustedAmount = amount > outstanding ? outstanding : amount;
+
+      loan.addPartialRepayment(adjustedAmount, date);
+      loan.save();
+      loans[loanIndex] = loan;
+      filteredLoans.value = loans;
+    } catch (e) {
+      print('Error adding partial repayment (settlement): $e');
+      _showSnackbar('Error', 'Failed to add partial repayment');
+    }
+  }
+
+  // New: add top-up to existing loan (increase principal)
+  void addTopUp(String serialNumber, double amount, DateTime date) {
+    try {
+      if (amount <= 0) {
+        _showSnackbar('Error', 'Top-up amount must be positive');
+        return;
+      }
+      final loanIndex = loans.indexWhere(
+        (loan) => loan.serialNumber == serialNumber,
+      );
+      if (loanIndex == -1) {
+        _showSnackbar('Error', 'Loan not found');
+        return;
+      }
+      final loan = loans[loanIndex];
+      loan.addTopUp(amount, date);
+      loan.save();
+      loans[loanIndex] = loan;
+      filteredLoans.value = loans;
+      refreshLoanCalculations();
+    } catch (e) {
+      print('Error adding top up: $e');
+      _showSnackbar('Error', 'Failed to add top-up');
     }
   }
 
@@ -552,6 +624,13 @@ class LoanController extends GetxController {
   double getOutstandingDue(String serialNumber) {
     final loan = getLoanBySerial(serialNumber);
     if (loan == null) return 0.0;
+    return loan.outstandingDueAt(DateTime.now(), forSettlement: false);
+  }
+
+  // New: outstanding due for settlement now (with min 30-day enforcement)
+  double getOutstandingDueForSettlement(String serialNumber) {
+    final loan = getLoanBySerial(serialNumber);
+    if (loan == null) return 0.0;
     return loan.outstandingDueAt(DateTime.now(), forSettlement: true);
   }
 
@@ -593,7 +672,6 @@ class LoanController extends GetxController {
   // Calculate early repayment interest (portion of outstanding that is interest)
   double calculateEarlyRepaymentInterest(Loan loan) {
     try {
-      final asOf = DateTime.now();
       // Interest due is compoundInterest under our model
       return loan.compoundInterest;
     } catch (e) {
