@@ -121,7 +121,8 @@ class Loan extends HiveObject {
     double principal = amountGiven;
     double accrued = 0.0;
     double interestPaid = 0.0; // interest actually paid (beyond principal)
-    double extraInterestPaid = 0.0; // interest paid that exceeds accrued (e.g., min 30-day enforcement)
+    double extraInterestPaid =
+        0.0; // interest paid that exceeds accrued (e.g., min 30-day enforcement)
 
     // Sort partial repayments by date
     final events = List<PartialRepayment>.from(partialRepayments)
@@ -200,7 +201,8 @@ class Loan extends HiveObject {
     final asOf = DateTime.now();
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     // Enforce minimum 30 days on early settlement check
     final daysSinceStart = asOf.difference(date).inDays;
@@ -233,7 +235,8 @@ class Loan extends HiveObject {
     final asOf = DateTime.now();
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     final daysSinceStart = asOf.difference(date).inDays;
     if (daysSinceStart < 30) {
@@ -250,7 +253,8 @@ class Loan extends HiveObject {
     final s = _ledgerUpTo(asOf);
     double principal = s['principal'] ?? 0.0;
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     // Enforce 30-day minimum interest on settlement as of now
     final daysSinceStart = asOf.difference(date).inDays;
@@ -315,6 +319,11 @@ class Loan extends HiveObject {
     return amountGiven + agreedPeriodInterest;
   }
 
+  // Planned due based on agreed duration (principal + agreed period interest - received)
+  double get plannedDue {
+    return immediateTotalDue - amountReceived;
+  }
+
   // Method to add partial repayment
   void addPartialRepayment(double amount, DateTime repaymentDate) {
     final daysSinceLoan = repaymentDate.difference(date).inDays;
@@ -372,7 +381,8 @@ class Loan extends HiveObject {
     final s = _ledgerUpTo(asOf);
     double principal = s['principal'] ?? 0.0;
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     if (forSettlement) {
       final daysSinceStart = asOf.difference(date).inDays;

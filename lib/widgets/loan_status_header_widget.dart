@@ -62,9 +62,9 @@ class LoanStatusHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'NPR ${loan.dueAmount.toStringAsFixed(2)}',
+                      'NPR ${loan.plannedDue.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: loan.dueAmount > 0
+                        color: loan.plannedDue > 0
                             ? Colors.red[100]
                             : Colors.green[100],
                         fontSize: isMobile ? 18 : 24,
@@ -72,7 +72,7 @@ class LoanStatusHeader extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Amount Due',
+                      'Amount Due (Planned)',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,

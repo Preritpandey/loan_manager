@@ -12,11 +12,14 @@ class LoanStatementTiles extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.find<LoanController>();
     final allForCustomer = controller.getLoansByCustomerName(loan.name);
-    final additionalLoans =
-        allForCustomer.where((l) => l.serialNumber != loan.serialNumber).toList();
+    final additionalLoans = allForCustomer
+        .where((l) => l.serialNumber != loan.serialNumber)
+        .toList();
     final additionalCount = additionalLoans.length;
-    final additionalTotal =
-        additionalLoans.fold<double>(0.0, (sum, l) => sum + l.amountGiven);
+    final additionalTotal = additionalLoans.fold<double>(
+      0.0,
+      (sum, l) => sum + l.amountGiven,
+    );
 
     final amountPaid = loan.amountReceived;
     final outstanding = loan.dueAmount;
@@ -156,10 +159,7 @@ class _Tile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -170,18 +170,30 @@ class _Tile extends StatelessWidget {
   }
 }
 
-class _StatementSection extends StatelessWidget {
+class _StatementSection extends StatefulWidget {
   final Loan loan;
   const _StatementSection({required this.loan});
 
   @override
+  State<_StatementSection> createState() => _StatementSectionState();
+}
+
+class _StatementSectionState extends State<_StatementSection> {
+  bool _showAll = false;
+
+  @override
   Widget build(BuildContext context) {
     final controller = Get.find<LoanController>();
-    final allForCustomer = controller.getLoansByCustomerName(loan.name);
-    final additionalLoans =
-        allForCustomer.where((l) => l.serialNumber != loan.serialNumber).toList();
+    final allForCustomer = controller.getLoansByCustomerName(widget.loan.name);
+    final additionalLoans = allForCustomer
+        .where((l) => l.serialNumber != widget.loan.serialNumber)
+        .toList();
 
-    final events = _buildEvents(loan, additionalLoans);
+    final eventsAsc = _buildEvents(widget.loan, additionalLoans);
+    final eventsDesc = List<_StatementEvent>.from(eventsAsc.reversed);
+    final List<_StatementEvent> displayedEvents = _showAll
+        ? eventsAsc
+        : eventsDesc.take(2).toList();
 
     return Container(
       margin: const EdgeInsets.only(top: 4),
@@ -211,19 +223,37 @@ class _StatementSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (events.isEmpty)
+          if (eventsAsc.isEmpty)
             Text(
               'No transactions yet',
-              style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
             )
           else
             Column(
-              children: events
-                  .map((e) => _StatementRow(
-                        event: e,
-                      ))
+              children: displayedEvents
+                  .map((e) => _StatementRow(event: e))
                   .toList(),
             ),
+          if (eventsAsc.length > 2) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _showAll = !_showAll),
+                icon: Icon(_showAll ? Icons.expand_less : Icons.expand_more),
+                label: Text(_showAll ? 'Show less' : 'Show more'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -395,11 +425,15 @@ class _StatementRow extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    _chip('NPR ${event.amount.toStringAsFixed(2)}',
-                        Colors.black87, Colors.grey.shade300),
-                    const SizedBox(width: 6),
+                    _chip(
+                      'NPR ${event.amount.toStringAsFixed(2)}',
+                      Colors.black87,
+                      Colors.grey.shade300,
+                    ),
                     if (event.type == _EventType.repayment) ...[
                       if (event.principalPortion > 0)
                         _chip(
@@ -413,7 +447,9 @@ class _StatementRow extends StatelessWidget {
                           Colors.green.shade800,
                           Colors.green.shade100,
                         ),
-                      if (event.principalPortion == 0 && event.interestPortion > 0 && event.extraInterest == 0)
+                      if (event.principalPortion == 0 &&
+                          event.interestPortion > 0 &&
+                          event.extraInterest == 0)
                         _chip(
                           'Interest Only',
                           Colors.orange.shade800,
@@ -426,9 +462,17 @@ class _StatementRow extends StatelessWidget {
                           Colors.red.shade100,
                         ),
                     ] else if (event.type == _EventType.disbursement) ...[
-                      _chip('Disbursement', Colors.orange.shade800, Colors.orange.shade100),
+                      _chip(
+                        'Disbursement',
+                        Colors.orange.shade800,
+                        Colors.orange.shade100,
+                      ),
                     ] else if (event.type == _EventType.extraLoan) ...[
-                      _chip('Extra Loan', Colors.blue.shade800, Colors.blue.shade100),
+                      _chip(
+                        'Extra Loan',
+                        Colors.blue.shade800,
+                        Colors.blue.shade100,
+                      ),
                     ],
                   ],
                 ),
@@ -438,7 +482,7 @@ class _StatementRow extends StatelessWidget {
                     event.note!,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
-                ]
+                ],
               ],
             ),
           ),

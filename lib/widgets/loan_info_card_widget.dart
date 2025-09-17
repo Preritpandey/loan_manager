@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/widgets/info_row_widget.dart';
 import 'package:list/utils/nepali_date_utils.dart';
+import 'package:list/controllers/loan_detail_operations_controller.dart';
+import 'package:list/controllers/loan_controller.dart';
 
 class LoanInfoCard extends StatefulWidget {
   final Loan loan;
@@ -51,6 +54,15 @@ class _LoanInfoCardState extends State<LoanInfoCard> {
     if (widget.loan.isInBox) {
       widget.loan.save();
     }
+    // Ensure all dependent summaries recompute and UI refreshes beyond this card
+    try {
+      // Refresh calculations in the loan list/controller layer
+      Get.find<LoanController>().refreshLoanCalculations();
+    } catch (_) {}
+    try {
+      // Force the loan detail page to rebuild (GetBuilder)
+      Get.find<LoanDetailOperationsController>().update();
+    } catch (_) {}
     setState(() {});
     ScaffoldMessenger.of(
       context,
@@ -82,7 +94,7 @@ class _LoanInfoCardState extends State<LoanInfoCard> {
               const Icon(Icons.schedule, size: 18, color: Colors.grey),
               const SizedBox(width: 8),
               const SizedBox(
-                width: 140,
+                width: 120,
                 child: Text(
                   'Duration',
                   style: TextStyle(

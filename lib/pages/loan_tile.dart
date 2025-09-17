@@ -55,10 +55,10 @@ class LoanTile extends StatelessWidget {
               Text('Interest: NPR ${loan.acquiredInterest.toStringAsFixed(2)}'),
               Text('Received: NPR ${loan.amountReceived.toStringAsFixed(2)}'),
               Text(
-                'Due Amount: NPR ${loan.dueAmount.toStringAsFixed(2)}',
+                'Due Amount: NPR ${loan.plannedDue.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: loan.dueAmount > 0 ? Colors.red : Colors.green,
+                  color: loan.plannedDue > 0 ? Colors.red : Colors.green,
                 ),
               ),
               if (hasMultipleLoans) ...[

@@ -31,10 +31,16 @@ class FinancialSummaryCard extends StatelessWidget {
         ),
         InfoRow(
           label: 'Planned Total (P + I for duration)',
-          value:
-              'NPR ${(loan.amountGiven + loan.agreedPeriodInterest).toStringAsFixed(2)}',
+          value: 'NPR ${loan.immediateTotalDue.toStringAsFixed(2)}',
           color: Colors.blue[900],
           icon: Icons.summarize,
+          isAmount: true,
+        ),
+        InfoRow(
+          label: 'Total Due (P+I - Received)',
+          value: 'NPR ${loan.plannedDue.toStringAsFixed(2)}',
+          color: Colors.blue[800],
+          icon: Icons.request_quote,
           isAmount: true,
         ),
         const SizedBox(height: 8),
@@ -79,14 +85,8 @@ class FinancialSummaryCard extends StatelessWidget {
             ],
           ),
         ),
-        InfoRow(
-          label: 'Total Due (P+I - Received)',
-          value: 'NPR ${loan.dueAmount.toStringAsFixed(2)}',
-          color: Colors.blue[700],
-          icon: Icons.calculate,
-          isAmount: true,
-        ),
 
+        // Real-time due (as of today) is intentionally omitted to prevent confusion.
         if (loan.isOverdue) ...[
           const Divider(height: 20),
           InfoRow(

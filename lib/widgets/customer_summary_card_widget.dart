@@ -59,8 +59,9 @@ class CustomerSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final LoanController loanController = Get.find<LoanController>();
     final customerLoans = loanController.getLoansByCustomerName(loan.name);
-    final totalDueAmount = loanController.getTotalDueAmountForCustomer(
-      loan.name,
+    final totalDueAmount = customerLoans.fold(
+      0.0,
+      (sum, l) => sum + l.plannedDue,
     );
     final totalAmountGiven = customerLoans.fold(
       0.0,
