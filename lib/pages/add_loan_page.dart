@@ -297,10 +297,12 @@ class AddLoanPage extends StatelessWidget {
             vertical: 16,
           ),
         ),
-        keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+        keyboardType: isNumber
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
         maxLines: maxLines,
         inputFormatters: isNumber
-            ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
+            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))]
             : null,
         onSaved: (value) => controller.updateFormData(key, value),
         validator: (value) {
@@ -655,7 +657,7 @@ class AddLoanPage extends StatelessWidget {
   }
 
   Future<NepaliDate?> _showNepaliDatePicker(BuildContext context) async {
-    final today = NepaliDate.today();
+    // final today = NepaliDate.today();
     final years = NepaliDate.getYears();
 
     int selectedYear = controller.selectedNepaliDate.value.year;

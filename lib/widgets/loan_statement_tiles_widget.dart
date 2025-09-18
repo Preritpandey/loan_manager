@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
+import 'package:list/controllers/loan_detail_operations_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 
@@ -22,7 +23,11 @@ class LoanStatementTiles extends StatelessWidget {
     );
 
     final amountPaid = loan.amountReceived;
-    final outstanding = loan.dueAmount;
+    final ops = Get.find<LoanDetailOperationsController>();
+    final bool overrideActive = ops.isDurationOverrideActive;
+    final outstanding = overrideActive
+        ? ops.overrideOutstandingNow
+        : loan.dueAmount;
 
     final tiles = LayoutBuilder(
       builder: (context, constraints) {
@@ -64,21 +69,21 @@ class LoanStatementTiles extends StatelessWidget {
         if (isWide) {
           return Row(
             children: [
-              Expanded(child: children[0]),
-              const SizedBox(width: 12),
-              Expanded(child: children[1]),
-              const SizedBox(width: 12),
-              Expanded(child: children[2]),
+              // Expanded(child: children[0]),
+              // const SizedBox(width: 12),
+              // Expanded(child: children[1]),
+              // const SizedBox(width: 12),
+              // Expanded(child: children[2]),
             ],
           );
         }
         return Column(
           children: [
-            children[0],
-            const SizedBox(height: 12),
-            children[1],
-            const SizedBox(height: 12),
-            children[2],
+            // children[0],
+            // const SizedBox(height: 12),
+            // children[1],
+            // const SizedBox(height: 12),
+            // children[2],
           ],
         );
       },

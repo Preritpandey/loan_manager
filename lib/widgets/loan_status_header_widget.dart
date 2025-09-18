@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:list/models/loan.dart';
+import 'package:get/get.dart';
+import 'package:list/controllers/loan_detail_operations_controller.dart';
 import 'package:list/widgets/status_badge_widget.dart';
 
 class LoanStatusHeader extends StatelessWidget {
@@ -58,28 +60,36 @@ class LoanStatusHeader extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'NPR ${loan.plannedDue.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: loan.plannedDue > 0
-                            ? Colors.red[100]
-                            : Colors.green[100],
-                        fontSize: isMobile ? 18 : 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Amount Due (Planned)',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                child: GetBuilder<LoanDetailOperationsController>(
+                  builder: (ops) {
+                    final bool overrideActive = ops.isDurationOverrideActive;
+                    final double amount = overrideActive
+                        ? ops.overrideOutstandingNow
+                        : loan.dueAmount;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'NPR ${amount.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: amount > 0
+                                ? Colors.red[100]
+                                : Colors.green[100],
+                            fontSize: isMobile ? 18 : 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Amount Due',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -94,21 +104,9 @@ class LoanStatusHeader extends StatelessWidget {
                   text: 'FULLY PAID',
                   color: Colors.green[100]!,
                   icon: Icons.check_circle,
-                )
-              else if (loan.isOverdue)
-                StatusBadge(
-                  text: '${loan.overdueDays} DAYS OVERDUE',
-                  color: Colors.red[100]!,
-                  icon: Icons.warning,
-                )
-              else
-                StatusBadge(
-                  text: '${loan.daysRemaining} DAYS LEFT',
-                  color: Colors.orange[100]!,
-                  icon: Icons.schedule,
                 ),
               StatusBadge(
-                text: '${loan.interestRate}% YEARLY',
+                text: '${loan.interestRate} YEARLY',
                 color: Colors.purple[100]!,
                 icon: Icons.percent,
               ),

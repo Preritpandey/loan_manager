@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
@@ -8,6 +9,7 @@ class LoanDetailOperationsController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
 
   final receivedAmountController = TextEditingController();
+  final durationOverrideInputController = TextEditingController(text: '');
 
   final isProcessingAction = false.obs;
   Timer? _updateTimer;
@@ -15,11 +17,46 @@ class LoanDetailOperationsController extends GetxController {
   late Loan _loan;
   Loan get loan => _loan;
 
+  // Duration override: when set, UI should use custom-days interest instead of default
+  final RxnInt _overrideDays = RxnInt();
+  int? get overrideDays => _overrideDays.value;
+  bool get isDurationOverrideActive =>
+      _overrideDays.value != null && (_overrideDays.value ?? 0) > 0;
+
+  // Computed values when override is active
+  double get overrideInterest {
+    final days = _overrideDays.value ?? 0;
+    if (days <= 0) return 0.0;
+    return _loan.calculateCustomDaysInterest(days);
+  }
+
+  double get overrideImmediateTotal {
+    if (!isDurationOverrideActive) return 0.0;
+    // Use remaining principal as base for total when overriding days
+    return _loan.remainingPrincipal + overrideInterest;
+  }
+
+  double get overridePlannedDue {
+    if (!isDurationOverrideActive) return 0.0;
+    // Total due under override = (remaining principal + override interest) - amount received so far
+    // Note: amountReceived has already been accounted into remainingPrincipal via ledger for principal.
+    return overrideImmediateTotal -
+        0.0; // remainingPrincipal already excludes received principal
+  }
+
+  double get overrideOutstandingNow {
+    if (!isDurationOverrideActive) return 0.0;
+    // Outstanding shown in tiles: principal + interest under override days
+    return overrideImmediateTotal;
+  }
+
   void initializeLoan(Loan loan) {
     _loan = loan;
     // Treat the input as an additional amount to add, so start with empty field
     receivedAmountController.text = '';
+    durationOverrideInputController.text = '';
     _startPeriodicUpdates();
+    _loadSavedOverrideDays();
   }
 
   void _startPeriodicUpdates() {
@@ -80,6 +117,24 @@ class LoanDetailOperationsController extends GetxController {
     } finally {
       isProcessingAction.value = false;
     }
+  }
+
+  // Duration override controls
+  void activateDurationOverride(int days) {
+    if (days <= 0) {
+      _showErrorSnackbar('Duration must be greater than 0 days');
+      return;
+    }
+    _overrideDays.value = days;
+    _persistOverrideDays(days);
+    update();
+  }
+
+  void clearDurationOverride() {
+    _overrideDays.value = null;
+    durationOverrideInputController.text = '';
+    _removeSavedOverrideDays();
+    update();
   }
 
   Future<bool> deleteLoan() async {
@@ -241,6 +296,41 @@ class LoanDetailOperationsController extends GetxController {
       return false;
     } finally {
       isProcessingAction.value = false;
+    }
+  }
+
+  // Persistence helpers for duration override
+  String get _overrideKey => 'override_days_${_loan.serialNumber}';
+
+  Future<void> _loadSavedOverrideDays() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getInt(_overrideKey);
+      if (saved != null && saved > 0) {
+        _overrideDays.value = saved;
+        durationOverrideInputController.text = saved.toString();
+        update();
+      }
+    } catch (e) {
+      // Ignore persistence errors silently
+    }
+  }
+
+  Future<void> _persistOverrideDays(int days) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_overrideKey, days);
+    } catch (e) {
+      // Ignore persistence errors silently
+    }
+  }
+
+  Future<void> _removeSavedOverrideDays() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_overrideKey);
+    } catch (e) {
+      // Ignore persistence errors silently
     }
   }
 
@@ -531,6 +621,7 @@ class LoanDetailOperationsController extends GetxController {
   @override
   void onClose() {
     receivedAmountController.dispose();
+    durationOverrideInputController.dispose();
     _updateTimer?.cancel();
     super.onClose();
   }

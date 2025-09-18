@@ -12,6 +12,7 @@ import 'package:list/widgets/payment_options_card_widget.dart';
 import 'package:list/widgets/loan_statement_tiles_widget.dart';
 import 'package:list/widgets/customer_summary_card_widget.dart';
 import 'package:list/widgets/delete_loan_card_widget.dart';
+import 'package:flutter/services.dart';
 
 class LoanDetailPage extends StatefulWidget {
   final Loan loan;
@@ -80,6 +81,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
                   children: [
                     // Status Header
                     LoanStatusHeader(loan: loan),
+                    const SizedBox(height: 8),
+                    _DurationOverrideBar(controller: operationsController),
 
                     if (isDesktop)
                       _buildDesktopLayout(loan)
@@ -151,6 +154,106 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
           onDelete: () => operationsController.showDeleteConfirmationDialog(),
         ),
       ],
+    );
+  }
+}
+
+class _DurationOverrideBar extends StatelessWidget {
+  final LoanDetailOperationsController controller;
+  const _DurationOverrideBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return GetBuilder<LoanDetailOperationsController>(
+      builder: (ops) {
+        final active = ops.isDurationOverrideActive;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: active ? Colors.amber[50] : Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: (active ? Colors.amber[200] : Colors.blue[200])!,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                active ? Icons.timer : Icons.calculate,
+                color: active ? Colors.amber[800] : Colors.blue[800],
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: active
+                    ? Text(
+                        'Duration override active: ${ops.overrideDays} day(s). Totals reflect this.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber[900],
+                        ),
+                      )
+                    : Text(
+                        'Default: Using daily interest since start date. Enter a duration to override.',
+                        style: TextStyle(fontSize: 12, color: Colors.blue[900]),
+                      ),
+              ),
+              if (!active) ...[
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: controller.durationOverrideInputController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Duration (days)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    final v =
+                        int.tryParse(
+                          controller.durationOverrideInputController.text
+                              .trim(),
+                        ) ??
+                        0;
+                    if (v > 0) {
+                      controller.activateDurationOverride(v);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ] else ...[
+                OutlinedButton(
+                  onPressed: controller.clearDurationOverride,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.amber[900],
+                    side: BorderSide(color: Colors.amber[300]!),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: const Text('Clear'),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

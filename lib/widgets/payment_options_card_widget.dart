@@ -524,7 +524,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
               Icon(Icons.add_circle, color: Colors.purple[700]),
               const SizedBox(width: 8),
               Text(
-                'Top-up Principal',
+                'Give Additional Loan',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.purple[700],
@@ -551,7 +551,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
                       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                     ],
                     decoration: InputDecoration(
-                      labelText: 'Top-up Amount (NPR)',
+                      labelText: 'Additional Loan Amount (NPR)',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
