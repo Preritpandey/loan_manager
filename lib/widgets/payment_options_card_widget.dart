@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/controllers/loan_detail_operations_controller.dart';
+import 'package:list/utils/nepali_date_utils.dart';
+import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 class PaymentOptionsCard extends StatefulWidget {
   final Loan loan;
@@ -35,6 +37,9 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   String _confirmationType = '';
   double _confirmationAmount = 0.0;
   int _confirmationDays = 0;
+
+  // Selected collection date (BS)
+  NepaliDate _selectedNepaliDate = NepaliDate.today();
 
   @override
   void initState() {
@@ -106,6 +111,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     final success = await _controller.addInterestOnlyPayment(
       _confirmationAmount,
       _confirmationDays,
+      _selectedNepaliDate.toGregorian(),
     );
     if (success) {
       _showSuccessSnackbar(
@@ -119,6 +125,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     final success = await _controller.addPrincipalRepaymentWithInterest(
       _confirmationAmount,
       _confirmationDays,
+      _selectedNepaliDate.toGregorian(),
     );
     if (success) {
       if (_confirmationDays > 0) {
@@ -657,6 +664,24 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
             ),
           ),
 
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(Icons.event, color: Colors.amber[700]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Collection Date (BS): ${_selectedNepaliDate.format()}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _pickNepaliDate,
+                icon: const Icon(Icons.edit_calendar),
+                label: const Text('Change'),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
 
           Row(
@@ -728,6 +753,29 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     }
   }
 
+  Future<void> _pickNepaliDate() async {
+    final initial = picker.NepaliDateTime(
+      _selectedNepaliDate.year,
+      _selectedNepaliDate.month,
+      _selectedNepaliDate.day,
+    );
+    final selected = await picker.showMaterialDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: picker.NepaliDateTime(2000, 1, 1),
+      lastDate: picker.NepaliDateTime(2200, 12, 30),
+    );
+    if (selected != null) {
+      setState(() {
+        _selectedNepaliDate = NepaliDate(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+      });
+    }
+  }
+
   Future<void> _showCustomDayInput(BuildContext context) async {
     int selected = _selectedInterestDays;
     final controller = TextEditingController(text: selected.toString());
@@ -765,7 +813,10 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   }
 
   Future<void> _processOverallPayment() async {
-    final success = await _controller.addOverallPayment(_confirmationAmount);
+    final success = await _controller.addOverallPayment(
+      _confirmationAmount,
+      _selectedNepaliDate.toGregorian(),
+    );
     if (success) {
       _showSuccessSnackbar(
         'Payment of NPR ${_confirmationAmount.toStringAsFixed(2)} recorded',
@@ -774,7 +825,10 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   }
 
   Future<void> _processTopUp() async {
-    final success = await _controller.addTopUp(_confirmationAmount);
+    final success = await _controller.addTopUp(
+      _confirmationAmount,
+      _selectedNepaliDate.toGregorian(),
+    );
     if (success) {
       _showSuccessSnackbar(
         'Top-up of NPR ${_confirmationAmount.toStringAsFixed(2)} added',

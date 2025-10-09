@@ -252,7 +252,11 @@ class LoanDetailOperationsController extends GetxController {
 
   // New payment methods for the updated system
 
-  Future<bool> addInterestOnlyPayment(double interestAmount, int days) async {
+  Future<bool> addInterestOnlyPayment(
+    double interestAmount,
+    int days,
+    DateTime repaymentDate,
+  ) async {
     if (isProcessingAction.value) return false;
 
     if (interestAmount <= 0) {
@@ -268,9 +272,8 @@ class LoanDetailOperationsController extends GetxController {
     isProcessingAction.value = true;
 
     try {
-      // Apply the interest collection immediately so UI and due update right away
-      // We still calculate the amount for the selected days, but record it at 'now'
-      final repaymentDate = DateTime.now();
+      // Apply the interest collection at the selected date
+      // We still calculate the amount for the selected days, but record it at the chosen date
 
       // Record interest-only repayment; ledger applies to interest first so principal stays intact
       _loanController.addPartialRepayment(
@@ -384,6 +387,7 @@ class LoanDetailOperationsController extends GetxController {
   Future<bool> addPrincipalRepaymentWithInterest(
     double principalAmount,
     int days,
+    DateTime repaymentDate,
   ) async {
     if (isProcessingAction.value) return false;
 
@@ -406,8 +410,8 @@ class LoanDetailOperationsController extends GetxController {
     isProcessingAction.value = true;
 
     try {
-      // Start from last event date for accurate accrual segments
-      final start = _loan.lastEventDate;
+      // Use selected date for both principal and interest entries
+      final start = repaymentDate;
 
       // 1) Apply principal repayment at start
       _loanController.addPartialRepayment(
@@ -434,7 +438,7 @@ class LoanDetailOperationsController extends GetxController {
         _loanController.addPartialRepayment(
           _loan.serialNumber,
           interestAmount,
-          DateTime.now(),
+          repaymentDate,
         );
 
         // Reload
@@ -507,7 +511,7 @@ class LoanDetailOperationsController extends GetxController {
   }
 
   // New: top up existing loan (increase principal)
-  Future<bool> addTopUp(double amount) async {
+  Future<bool> addTopUp(double amount, DateTime date) async {
     if (isProcessingAction.value) return false;
     if (amount <= 0) {
       _showErrorSnackbar('Top-up amount must be positive');
@@ -515,7 +519,7 @@ class LoanDetailOperationsController extends GetxController {
     }
     isProcessingAction.value = true;
     try {
-      _loanController.addTopUp(_loan.serialNumber, amount, DateTime.now());
+      _loanController.addTopUp(_loan.serialNumber, amount, date);
       final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
       if (refreshed != null) {
         _loan = refreshed;
@@ -533,16 +537,15 @@ class LoanDetailOperationsController extends GetxController {
   }
 
   // New: overall payment - apply any amount now; will go to interest first, then principal
-  Future<bool> addOverallPayment(double amount) async {
+  Future<bool> addOverallPayment(double amount, DateTime paymentDate) async {
     if (isProcessingAction.value) return false;
     if (amount <= 0) {
       _showErrorSnackbar('Payment amount must be positive');
       return false;
     }
     // Prevent overpayment beyond settlement outstanding due now (min-30 enforced)
-    final outstanding = _loanController.getOutstandingDueForSettlement(
-      _loan.serialNumber,
-    );
+    // Validate against outstanding due as of the selected date (settlement rules)
+    final outstanding = _loan.outstandingDueAt(paymentDate, forSettlement: true);
     if (amount - outstanding > 0.005) {
       _showErrorSnackbar(
         'Amount exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
@@ -554,7 +557,7 @@ class LoanDetailOperationsController extends GetxController {
       _loanController.addPartialRepaymentForSettlement(
         _loan.serialNumber,
         amount,
-        DateTime.now(),
+        paymentDate,
       );
       final refreshed = _loanController.getLoanBySerial(_loan.serialNumber);
       if (refreshed != null) {
