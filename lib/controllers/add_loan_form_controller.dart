@@ -13,6 +13,7 @@ class AddLoanFormController extends GetxController {
   final showingReissueInfo = false.obs;
   final selectedNepaliDate = NepaliDate.today().obs;
   final useCustomDate = false.obs;
+  bool isAddingForExistingCustomer = false;
 
   void updateFormData(String key, dynamic value) {
     formData[key] = value;
@@ -20,6 +21,26 @@ class AddLoanFormController extends GetxController {
     if (key == 'name' && value != null && value.toString().isNotEmpty) {
       _checkForLoanReissue(value.toString());
     }
+  }
+
+  void preFillFromArguments(Map<String, dynamic> arguments) {
+    // Pre-fill customer information from arguments
+    isAddingForExistingCustomer = true;
+    formData['name'] = arguments['customerName'];
+    formData['phone'] = arguments['phone'];
+    formData['address'] = arguments['address'];
+    formData['serialNumber'] = arguments['serialNumber'];
+
+    // Don't show reissue info since we're adding for existing customer
+    showingReissueInfo.value = false;
+
+    print(
+      '🔧 Pre-filling form for existing customer: ${arguments['customerName']}',
+    );
+    print('🔧 Phone: ${arguments['phone']}');
+    print('🔧 Address: ${arguments['address']}');
+    print('🔧 Serial Number: ${arguments['serialNumber']}');
+    print('🔧 isAddingForExistingCustomer: $isAddingForExistingCustomer');
   }
 
   void _checkForLoanReissue(String customerName) {
@@ -80,7 +101,33 @@ class AddLoanFormController extends GetxController {
   }
 
   void saveFormData() {
+    print('🔧 Saving form data...');
+    print('🔧 Current formData before save: $formData');
+
+    // Store customer data before form save (in case disabled fields don't save)
+    String? originalName = formData['name']?.toString();
+    String? originalPhone = formData['phone']?.toString();
+    String? originalAddress = formData['address']?.toString();
+
     formKey.currentState?.save();
+
+    // Ensure pre-filled customer data is preserved for existing customers
+    if (isAddingForExistingCustomer) {
+      print('🔧 Preserving customer data for existing customer...');
+
+      // Restore customer data if it was lost during form save
+      if (originalName != null && originalName.isNotEmpty) {
+        formData['name'] = originalName;
+      }
+      if (originalPhone != null && originalPhone.isNotEmpty) {
+        formData['phone'] = originalPhone;
+      }
+      if (originalAddress != null && originalAddress.isNotEmpty) {
+        formData['address'] = originalAddress;
+      }
+
+      print('🔧 FormData after save and restore: $formData');
+    }
   }
 
   Future<bool> submitForm() async {
@@ -94,6 +141,10 @@ class AddLoanFormController extends GetxController {
     bool success = false;
 
     try {
+      print('🔧 Submitting form...');
+      print('🔧 isAddingForExistingCustomer: $isAddingForExistingCustomer');
+      print('🔧 Form data: $formData');
+
       if (!_validateAllRequiredFields()) {
         _showErrorSnackbar('Please fill in all required fields');
         return false;
@@ -105,9 +156,19 @@ class AddLoanFormController extends GetxController {
         return false;
       }
 
+      print('🔧 Created loan for customer: ${loan.name}');
+      print('🔧 Serial Number: ${loan.serialNumber}');
+      print('🔧 Jewellery: ${loan.jewelleryName}');
+
       _loanController.addLoan(loan);
+      success = true; // Set success to true after successful loan addition
+
+      // Show success message
+      _showSuccessSnackbar('Loan added successfully!');
     } catch (e, stack) {
       print("Error while adding loan: $e\n$stack");
+      _showErrorSnackbar('Failed to add loan. Please try again.');
+      success = false;
     } finally {
       isSubmitting.value = false;
     }
@@ -116,6 +177,9 @@ class AddLoanFormController extends GetxController {
   }
 
   bool _validateAllRequiredFields() {
+    // Define customer fields that are pre-filled for existing customers
+    final customerFields = ['name', 'phone', 'address'];
+
     final requiredFields = [
       'name',
       'phone',
@@ -128,6 +192,12 @@ class AddLoanFormController extends GetxController {
     ];
 
     for (final field in requiredFields) {
+      // Skip validation for customer fields if we're adding for existing customer
+      // But always validate serialNumber as it represents the collateral
+      if (isAddingForExistingCustomer && customerFields.contains(field)) {
+        continue;
+      }
+
       if (formData[field] == null || formData[field].toString().isEmpty) {
         return false;
       }
@@ -144,21 +214,50 @@ class AddLoanFormController extends GetxController {
       final amountGiven = double.tryParse(amountStr);
 
       if (interestRate == null || amountGiven == null) {
+        print('🔧 Loan creation failed: Invalid interest rate or amount');
         return null;
       }
+
+      // For existing customers, ensure we have the customer data
+      String customerName = formData['name']?.toString() ?? '';
+      String customerPhone = formData['phone']?.toString() ?? '';
+      String customerAddress = formData['address']?.toString() ?? '';
+
+      // If customer data is empty but we're adding for existing customer, this is an error
+      if (isAddingForExistingCustomer &&
+          (customerName.isEmpty ||
+              customerPhone.isEmpty ||
+              customerAddress.isEmpty)) {
+        print('🔧 ERROR: Customer data is missing for existing customer!');
+        print('🔧   Name: "$customerName"');
+        print('🔧   Phone: "$customerPhone"');
+        print('🔧   Address: "$customerAddress"');
+        print('🔧   FormData: $formData');
+        return null;
+      }
+
+      print('🔧 Creating loan with data:');
+      print('🔧   Name: "$customerName"');
+      print('🔧   Phone: "$customerPhone"');
+      print('🔧   Address: "$customerAddress"');
+      print('🔧   Serial Number: ${formData['serialNumber']}');
+      print('🔧   Jewellery: ${formData['jewelleryName']}');
+      print('🔧   Type: ${formData['type']}');
+      print('🔧   Amount: $amountGiven');
+      print('🔧   Interest Rate: $interestRate');
 
       // Use a default duration of 365 days (1 year) since we're now calculating daily interest
       // The actual interest calculation will be based on actual days passed
       return Loan.withNepaliDate(
-        name: formData['name'],
+        name: customerName,
         nepaliDate: selectedNepaliDate.value,
         duration: 365, // Default duration - actual interest calculated daily
         interestRate: interestRate,
         type: formData['type'],
         jewelleryName: formData['jewelleryName'],
         serialNumber: formData['serialNumber'],
-        phone: formData['phone'],
-        address: formData['address'],
+        phone: customerPhone,
+        address: customerAddress,
         description: formData['description'] ?? '',
         amountGiven: amountGiven,
       );
@@ -202,6 +301,7 @@ class AddLoanFormController extends GetxController {
     isSubmitting.value = false;
     selectedNepaliDate.value = NepaliDate.today();
     useCustomDate.value = false;
+    isAddingForExistingCustomer = false;
   }
 
   void setNepaliDate(NepaliDate nepaliDate) {
@@ -219,6 +319,28 @@ class AddLoanFormController extends GetxController {
     final parsed = NepaliDate.parse(dateString);
     if (parsed != null) {
       selectedNepaliDate.value = parsed;
+    }
+  }
+
+  /// Safely navigate back, checking if there are routes to pop
+  void safeNavigateBack() {
+    try {
+      if (Get.isDialogOpen == true) {
+        Get.back();
+      } else if (Get.isBottomSheetOpen == true) {
+        Get.back();
+      } else if (Get.currentRoute != '/') {
+        Get.back();
+      } else {
+        // If we're at the root route, just show a message
+        _showSuccessSnackbar(
+          'Loan added successfully! You can now add another loan.',
+        );
+      }
+    } catch (e) {
+      print('Navigation error: $e');
+      // Fallback: just show success message
+      _showSuccessSnackbar('Loan added successfully!');
     }
   }
 }

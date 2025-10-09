@@ -12,15 +12,6 @@ class LoanStatementTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<LoanController>();
-    final allForCustomer = controller.getLoansByCustomerName(loan.name);
-    final additionalLoans = allForCustomer
-        .where((l) => l.serialNumber != loan.serialNumber)
-        .toList();
-    final additionalCount = additionalLoans.length;
-    final additionalTotal = additionalLoans.fold<double>(
-      0.0,
-      (sum, l) => sum + l.amountGiven,
-    );
 
     final amountPaid = loan.amountReceived;
     final ops = Get.find<LoanDetailOperationsController>();
@@ -32,6 +23,13 @@ class LoanStatementTiles extends StatelessWidget {
     final tiles = LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 700;
+
+        // Compute additional/top-up statistics from negative partial repayments
+        final int additionalCount = loan.partialRepayments.where((r) => r.amount < 0).length;
+        final double additionalTotal = loan.partialRepayments
+            .where((r) => r.amount < 0)
+            .fold(0.0, (sum, r) => sum + (-r.amount));
+
         final children = [
           _Tile(
             color: Colors.green.shade50,
@@ -189,12 +187,8 @@ class _StatementSectionState extends State<_StatementSection> {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<LoanController>();
-    final allForCustomer = controller.getLoansByCustomerName(widget.loan.name);
-    final additionalLoans = allForCustomer
-        .where((l) => l.serialNumber != widget.loan.serialNumber)
-        .toList();
 
-    final eventsAsc = _buildEvents(widget.loan, additionalLoans);
+    final eventsAsc = _buildEvents(widget.loan);
     final eventsDesc = List<_StatementEvent>.from(eventsAsc.reversed);
     final List<_StatementEvent> displayedEvents = _showAll
         ? eventsAsc
@@ -264,7 +258,7 @@ class _StatementSectionState extends State<_StatementSection> {
     );
   }
 
-  List<_StatementEvent> _buildEvents(Loan loan, List<Loan> additionalLoans) {
+  List<_StatementEvent> _buildEvents(Loan loan) {
     final List<_StatementEvent> events = [];
 
     // Initial disbursement
@@ -292,6 +286,23 @@ class _StatementSectionState extends State<_StatementSection> {
         accrued += (principal * dailyRate * days) / 100.0;
       }
 
+      // Handle top-ups (negative amounts) differently
+      if (r.amount < 0) {
+        // This is a top-up (additional disbursement)
+        events.add(
+          _StatementEvent(
+            date: r.date,
+            type: _EventType.topUp,
+            amount: -r.amount, // Make it positive for display
+            note: 'Additional loan amount',
+          ),
+        );
+        principal += (-r.amount); // Increase principal
+        lastDate = r.date;
+        continue;
+      }
+
+      // Handle regular repayments (positive amounts)
       double remaining = r.amount;
       double interestPortion = 0.0;
       double principalPortion = 0.0;
@@ -319,10 +330,22 @@ class _StatementSectionState extends State<_StatementSection> {
         remaining = 0.0;
       }
 
+      // Determine the specific type of repayment
+      _EventType repaymentType = _EventType.repayment;
+      if (principalPortion > 0 && interestPortion == 0 && extraInterest == 0) {
+        repaymentType = _EventType.principalOnly;
+      } else if (principalPortion == 0 &&
+          interestPortion > 0 &&
+          extraInterest == 0) {
+        repaymentType = _EventType.interestOnly;
+      } else if (principalPortion > 0 && interestPortion > 0) {
+        repaymentType = _EventType.mixedPayment;
+      }
+
       events.add(
         _StatementEvent(
           date: r.date,
-          type: _EventType.repayment,
+          type: repaymentType,
           amount: r.amount,
           interestPortion: interestPortion,
           principalPortion: principalPortion,
@@ -333,17 +356,8 @@ class _StatementSectionState extends State<_StatementSection> {
       lastDate = r.date;
     }
 
-    // Additional loans (other loans by same customer)
-    for (final add in additionalLoans) {
-      events.add(
-        _StatementEvent(
-          date: add.date,
-          type: _EventType.extraLoan,
-          amount: add.amountGiven,
-          note: 'Serial ${add.serialNumber}',
-        ),
-      );
-    }
+    // Note: Removed additional loans from statement as they should not appear
+    // in individual loan statements - they are separate loans
 
     // Sort by date ascending
     events.sort((a, b) => a.date.compareTo(b.date));
@@ -374,6 +388,26 @@ class _StatementRow extends StatelessWidget {
         stripeColor = Colors.green.shade400;
         icon = Icons.call_made; // money in
         title = 'Payment Received';
+        break;
+      case _EventType.principalOnly:
+        stripeColor = Colors.blue.shade400;
+        icon = Icons.account_balance_wallet;
+        title = 'Principal Collected';
+        break;
+      case _EventType.interestOnly:
+        stripeColor = Colors.amber.shade400;
+        icon = Icons.percent;
+        title = 'Interest Collected';
+        break;
+      case _EventType.mixedPayment:
+        stripeColor = Colors.purple.shade400;
+        icon = Icons.payments;
+        title = 'Mixed Payment';
+        break;
+      case _EventType.topUp:
+        stripeColor = Colors.teal.shade400;
+        icon = Icons.add_circle;
+        title = 'Top-up Added';
         break;
       case _EventType.extraLoan:
         stripeColor = Colors.blue.shade400;
@@ -439,7 +473,10 @@ class _StatementRow extends StatelessWidget {
                       Colors.black87,
                       Colors.grey.shade300,
                     ),
-                    if (event.type == _EventType.repayment) ...[
+                    if (event.type == _EventType.repayment ||
+                        event.type == _EventType.principalOnly ||
+                        event.type == _EventType.interestOnly ||
+                        event.type == _EventType.mixedPayment) ...[
                       if (event.principalPortion > 0)
                         _chip(
                           'Principal ${event.principalPortion.toStringAsFixed(2)}',
@@ -452,14 +489,6 @@ class _StatementRow extends StatelessWidget {
                           Colors.green.shade800,
                           Colors.green.shade100,
                         ),
-                      if (event.principalPortion == 0 &&
-                          event.interestPortion > 0 &&
-                          event.extraInterest == 0)
-                        _chip(
-                          'Interest Only',
-                          Colors.orange.shade800,
-                          Colors.orange.shade100,
-                        ),
                       if (event.extraInterest > 0)
                         _chip(
                           'Extra Interest ${event.extraInterest.toStringAsFixed(2)}',
@@ -471,6 +500,12 @@ class _StatementRow extends StatelessWidget {
                         'Disbursement',
                         Colors.orange.shade800,
                         Colors.orange.shade100,
+                      ),
+                    ] else if (event.type == _EventType.topUp) ...[
+                      _chip(
+                        'Top-up',
+                        Colors.teal.shade800,
+                        Colors.teal.shade100,
                       ),
                     ] else if (event.type == _EventType.extraLoan) ...[
                       _chip(
@@ -512,7 +547,15 @@ class _StatementRow extends StatelessWidget {
   }
 }
 
-enum _EventType { disbursement, repayment, extraLoan }
+enum _EventType {
+  disbursement,
+  repayment,
+  extraLoan,
+  topUp,
+  principalOnly,
+  interestOnly,
+  mixedPayment,
+}
 
 class _StatementEvent {
   final DateTime date;

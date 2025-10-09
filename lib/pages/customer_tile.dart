@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
-import 'package:list/pages/loan_detail_page.dart';
+import 'package:list/pages/customer_loans_page.dart';
 
 class CustomerTile extends StatelessWidget {
   final String customerName;
@@ -17,53 +17,76 @@ class CustomerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<LoanController>();
-    final totalDueAmount = controller.getTotalDueAmountForCustomer(
-      customerName,
-    );
-    final totalAmountGiven = customerLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.amountGiven,
-    );
-    final totalAmountReceived = customerLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.amountReceived,
-    );
-    final totalFixedInterest = customerLoans.fold(
-      0.0,
-      (sum, loan) => sum + loan.agreedPeriodInterest,
-    );
-    final totalOverdueInterest = controller.getTotalOverdueInterestForCustomer(
-      customerName,
-    );
     final isOverdue = controller.isCustomerOverdue(customerName);
-    final totalOverdueDays = controller.getTotalOverdueDaysForCustomer(
-      customerName,
-    );
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _showCustomerDetails(),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(20.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              colors: isOverdue
+                  ? [Colors.red[50]!, Colors.red[100]!]
+                  : [Colors.blue[50]!, Colors.blue[100]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
             children: [
-              // Customer Name and Loan Count
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+              // Customer Icon
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isOverdue ? Colors.red[200] : Colors.blue[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.person,
+                  color: isOverdue ? Colors.red[700] : Colors.blue[700],
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Customer Name and Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       customerName,
-                      style: const TextStyle(
-                        fontSize: 18,
+                      style: TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        color: isOverdue ? Colors.red[700] : Colors.blue[700],
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isOverdue ? Colors.red[600] : Colors.blue[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Status Indicators
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   if (isOverdue)
                     Container(
-                      margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
@@ -72,164 +95,44 @@ class CustomerTile extends StatelessWidget {
                         color: Colors.red,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
+                      child: const Text(
                         'OVERDUE',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
+                  const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(12),
+                      color: isOverdue ? Colors.red : Colors.blue,
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
+                      '${customerLoans.length}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Financial Summary
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSummaryItem(
-                      'Total Given',
-                      'NPR ${totalAmountGiven.toStringAsFixed(2)}',
-                      Colors.blue,
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildSummaryItem(
-                      'Total Received',
-                      'NPR ${totalAmountReceived.toStringAsFixed(2)}',
-                      Colors.green,
+                  const SizedBox(height: 4),
+                  Text(
+                    'loan${customerLoans.length > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isOverdue ? Colors.red[600] : Colors.blue[600],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSummaryItem(
-                      'Fixed Interest',
-                      'NPR ${totalFixedInterest.toStringAsFixed(2)}',
-                      Colors.orange,
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildSummaryItem(
-                      'Total Due',
-                      'NPR ${totalDueAmount.toStringAsFixed(2)}',
-                      totalDueAmount > 0 ? Colors.red : Colors.green,
-                    ),
-                  ),
-                ],
-              ),
-              if (isOverdue) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildSummaryItem(
-                        'Overdue Days',
-                        '$totalOverdueDays days',
-                        Colors.red,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildSummaryItem(
-                        'Overdue Interest',
-                        'NPR ${totalOverdueInterest.toStringAsFixed(2)}',
-                        Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 12),
-
-              // Loan Details
-              const Text(
-                'Loans:',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...customerLoans
-                  .map(
-                    (loan) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${loan.type} - ${loan.jewelleryName}',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                Text(
-                                  '${loan.interestRate}% - ${loan.duration} days',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'NPR ${loan.immediateTotalDue.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (loan.isOverdue)
-                                Text(
-                                  '${loan.overdueDays} days overdue',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-
-              // Customer Info
-              const SizedBox(height: 12),
-              Text(
-                'Phone: ${customerLoans.first.phone}',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
@@ -238,25 +141,13 @@ class CustomerTile extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showCustomerDetails() {
-    // Show the first loan's detail page (user can navigate to others from there)
-    Get.to(() => LoanDetailPage(loan: customerLoans.first));
+    // Navigate to customer loans page showing all loans for this customer
+    Get.to(
+      () => CustomerLoansPage(
+        customerName: customerName,
+        customerLoans: customerLoans,
+      ),
+    );
   }
 }

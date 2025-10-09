@@ -12,6 +12,7 @@ import 'package:list/widgets/payment_options_card_widget.dart';
 import 'package:list/widgets/loan_statement_tiles_widget.dart';
 import 'package:list/widgets/customer_summary_card_widget.dart';
 import 'package:list/widgets/delete_loan_card_widget.dart';
+import 'package:list/widgets/customer_other_loans_widget.dart';
 import 'package:flutter/services.dart';
 
 class LoanDetailPage extends StatefulWidget {
@@ -123,6 +124,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               LoanStatementTiles(loan: loan),
               const SizedBox(height: 8),
               CustomerSummaryCard(loan: loan),
+              const SizedBox(height: 8),
+              CustomerOtherLoansWidget(currentLoan: loan),
               PaymentOptionsCard(loan: loan),
               DeleteLoanCard(
                 loan: loan,
@@ -148,6 +151,8 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         const SizedBox(height: 8),
         if (loan.description.isNotEmpty) DescriptionCard(loan: loan),
         CustomerSummaryCard(loan: loan),
+        const SizedBox(height: 8),
+        CustomerOtherLoansWidget(currentLoan: loan),
         PaymentOptionsCard(loan: loan),
         DeleteLoanCard(
           loan: loan,

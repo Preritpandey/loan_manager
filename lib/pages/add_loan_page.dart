@@ -4,10 +4,35 @@ import 'package:get/get.dart';
 import 'package:list/controllers/add_loan_form_controller.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 
-class AddLoanPage extends StatelessWidget {
-  final controller = Get.put(AddLoanFormController());
+class AddLoanPage extends StatefulWidget {
+  const AddLoanPage({super.key});
 
-  AddLoanPage({super.key});
+  @override
+  State<AddLoanPage> createState() => _AddLoanPageState();
+}
+
+class _AddLoanPageState extends State<AddLoanPage> {
+  late AddLoanFormController controller;
+  bool isAddingForExistingCustomer = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.put(AddLoanFormController());
+
+    // Check for arguments passed from Customer Loans Page
+    final arguments = Get.arguments as Map<String, dynamic>?;
+    if (arguments != null) {
+      print('🔧 AddLoanPage received arguments: $arguments');
+      isAddingForExistingCustomer = true;
+      // Pre-fill form with customer information
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.preFillFromArguments(arguments);
+      });
+    } else {
+      print('🔧 AddLoanPage: No arguments received - creating new customer');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,9 +43,9 @@ class AddLoanPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
-          'Add New Loan',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          isAddingForExistingCustomer ? 'Add Another Loan' : 'Add New Loan',
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Color.fromARGB(255, 204, 21, 27),
         foregroundColor: Colors.white,
@@ -55,7 +80,9 @@ class AddLoanPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Loan Details',
+                              isAddingForExistingCustomer
+                                  ? 'Additional Loan Details'
+                                  : 'Loan Details',
                               style: Theme.of(context).textTheme.headlineSmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -63,7 +90,9 @@ class AddLoanPage extends StatelessWidget {
                                   ),
                             ),
                             Text(
-                              'Fill in the borrower and loan information',
+                              isAddingForExistingCustomer
+                                  ? 'Add another loan for the same customer'
+                                  : 'Fill in the borrower and loan information',
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: Colors.grey[600]),
                             ),
@@ -72,17 +101,55 @@ class AddLoanPage extends StatelessWidget {
                       ),
 
                       // Personal Information Section
-                      _buildSectionHeader('Personal Information', Icons.person),
+                      _buildSectionHeader(
+                        isAddingForExistingCustomer
+                            ? 'Customer Information (Fixed)'
+                            : 'Personal Information',
+                        Icons.person,
+                      ),
+                      if (isAddingForExistingCustomer) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.blue[600],
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Customer information is pre-filled and locked for this existing customer.',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       _buildResponsiveRow(isDesktop, [
                         _buildTextField(
                           'Loan Taker Name',
                           'name',
                           icon: Icons.person_outline,
+                          enabled: !isAddingForExistingCustomer,
                         ),
                         _buildTextField(
                           'Phone Number',
                           'phone',
                           icon: Icons.phone_outlined,
+                          enabled: !isAddingForExistingCustomer,
                         ),
                       ]),
                       _buildTextField(
@@ -90,6 +157,7 @@ class AddLoanPage extends StatelessWidget {
                         'address',
                         icon: Icons.location_on_outlined,
                         maxLines: 2,
+                        enabled: !isAddingForExistingCustomer,
                       ),
 
                       // Loan Reissue Notification
@@ -146,6 +214,8 @@ class AddLoanPage extends StatelessWidget {
                         'Serial Number',
                         'serialNumber',
                         icon: Icons.qr_code_outlined,
+                        enabled:
+                            true, // Always enabled as it represents the collateral
                       ),
 
                       const SizedBox(height: 24),
@@ -192,7 +262,7 @@ class AddLoanPage extends StatelessWidget {
                               onPressed: () async {
                                 final success = await controller.submitForm();
                                 if (success) {
-                                  Navigator.pop(context);
+                                  controller.safeNavigateBack();
                                 }
                               },
                               icon: const Icon(Icons.add_circle_outline),
@@ -266,56 +336,101 @@ class AddLoanPage extends StatelessWidget {
     String? prefix,
     int maxLines = 1,
     bool required = true,
+    bool enabled = true,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: icon != null ? Icon(icon, color: Colors.blue[700]) : null,
-          prefixText: prefix,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+      child: Obx(
+        () => TextFormField(
+          enabled: enabled,
+          initialValue: controller.formData[key]?.toString(),
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: icon != null
+                ? Icon(
+                    icon,
+                    color: enabled ? Colors.blue[700] : Colors.grey[500],
+                  )
+                : null,
+            prefixText: prefix,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: enabled ? Colors.blue[700]! : Colors.grey[400]!,
+                width: 2,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
+            ),
+            filled: true,
+            fillColor: enabled ? Colors.grey[50] : Colors.grey[200],
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.red, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.grey[50],
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
+          keyboardType: isNumber
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.text,
+          maxLines: maxLines,
+          inputFormatters: isNumber
+              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))]
+              : null,
+          onSaved: (value) {
+            // Always save the value, even if field is disabled (for pre-filled data)
+            // If field is disabled and value is null, use the existing formData value
+            final finalValue = value ?? controller.formData[key];
+            controller.updateFormData(key, finalValue);
+
+            // Debug logging for form saving
+            if (isAddingForExistingCustomer &&
+                (key == 'name' || key == 'phone' || key == 'address')) {
+              print(
+                '🔧 Form saving - Key: $key, Value: $value, FinalValue: $finalValue',
+              );
+            }
+          },
+          onChanged: (value) {
+            // For disabled fields, ensure the value is preserved
+            if (!enabled &&
+                isAddingForExistingCustomer &&
+                (key == 'name' || key == 'phone' || key == 'address')) {
+              // Keep the original value for disabled customer fields
+              controller.updateFormData(key, controller.formData[key]);
+            } else {
+              controller.updateFormData(key, value);
+            }
+          },
+          validator: (value) {
+            if (!required) return controller.validateOptionalField(value);
+
+            // Skip validation for customer fields when adding for existing customer
+            // But always validate serialNumber as it represents the collateral
+            if (isAddingForExistingCustomer &&
+                (key == 'name' || key == 'phone' || key == 'address')) {
+              return null;
+            }
+
+            if (isNumber) {
+              return controller.validateNumberField(
+                value,
+                label,
+                required: required,
+              );
+            }
+            return controller.validateRequiredField(value, label);
+          },
         ),
-        keyboardType: isNumber
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        maxLines: maxLines,
-        inputFormatters: isNumber
-            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))]
-            : null,
-        onSaved: (value) => controller.updateFormData(key, value),
-        validator: (value) {
-          if (!required) return controller.validateOptionalField(value);
-          if (isNumber) {
-            return controller.validateNumberField(
-              value,
-              label,
-              required: required,
-            );
-          }
-          return controller.validateRequiredField(value, label);
-        },
       ),
     );
   }

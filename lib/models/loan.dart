@@ -7,6 +7,8 @@ part 'loan.g.dart';
 class Loan extends HiveObject {
   @HiveField(0)
   String name;
+  @HiveField(14)
+  String loanId; // Unique identifier for each loan
   @HiveField(1)
   DateTime date;
   @HiveField(13)
@@ -49,7 +51,9 @@ class Loan extends HiveObject {
     this.amountReceived = 0.0,
     List<PartialRepayment>? partialRepayments,
     this.nepaliDateString,
-  }) : partialRepayments = partialRepayments ?? [];
+    String? loanId,
+  }) : partialRepayments = partialRepayments ?? [],
+       loanId = loanId ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   // Factory constructor for creating loan with Nepali date
   factory Loan.withNepaliDate({
@@ -66,6 +70,7 @@ class Loan extends HiveObject {
     required double amountGiven,
     double amountReceived = 0.0,
     List<PartialRepayment>? partialRepayments,
+    String? loanId,
   }) {
     return Loan(
       name: name,
@@ -82,6 +87,7 @@ class Loan extends HiveObject {
       amountReceived: amountReceived,
       partialRepayments: partialRepayments,
       nepaliDateString: nepaliDate.format(),
+      loanId: loanId,
     );
   }
 

@@ -212,7 +212,47 @@ class _LoanHomePageState extends State<LoanHomePage>
             ),
           ),
         ),
-        floatingActionButton: FloatingActionButtonsWidget(isDesktop: isDesktop),
+        floatingActionButton: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            // Normalize names button
+            FloatingActionButton(
+              heroTag: "normalize_names",
+              onPressed: () {
+                controller.normalizeCustomerNames();
+                Get.snackbar(
+                  'Normalize',
+                  'Customer names normalized',
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: Duration(seconds: 2),
+                );
+              },
+              backgroundColor: Colors.green,
+              child: Icon(Icons.merge_type),
+              mini: true,
+            ),
+            SizedBox(height: 8),
+            // Debug button to print loans
+            FloatingActionButton(
+              heroTag: "debug_print",
+              onPressed: () {
+                controller.printAllLoans();
+                Get.snackbar(
+                  'Debug',
+                  'All loans printed to console',
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: Duration(seconds: 2),
+                );
+              },
+              backgroundColor: Colors.orange,
+              child: Icon(Icons.print),
+              mini: true,
+            ),
+            SizedBox(height: 8),
+            // Original FAB
+            FloatingActionButtonsWidget(isDesktop: isDesktop),
+          ],
+        ),
       ),
     );
   }

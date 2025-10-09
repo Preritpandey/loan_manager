@@ -31,15 +31,18 @@ class LoanAdapter extends TypeAdapter<Loan> {
       amountReceived: fields[11] as double,
       partialRepayments: (fields[12] as List?)?.cast<PartialRepayment>(),
       nepaliDateString: fields[13] as String?,
+      loanId: fields[14] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Loan obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.name)
+      ..writeByte(14)
+      ..write(obj.loanId)
       ..writeByte(1)
       ..write(obj.date)
       ..writeByte(13)

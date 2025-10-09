@@ -30,6 +30,12 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
       isSearchActive.value = false;
       hasExplicitSearch.value = false;
+
+      // Print all loans to console for debugging
+      printAllLoans();
+
+      // Verify customer grouping
+      verifyCustomerGrouping();
     } catch (e) {
       print('Error loading loans: $e');
       _showSnackbar('Error', 'Failed to load loans');
@@ -40,17 +46,32 @@ class LoanController extends GetxController {
 
   void addLoan(Loan loan) {
     try {
-      // Check if serial number already exists
+      // Check for duplicate loans: same customer name + same jewellery name + same serial number
+      // This allows the same customer to have multiple loans with different collateral
       if (loans.any(
-        (existingLoan) => existingLoan.serialNumber == loan.serialNumber,
+        (existingLoan) =>
+            existingLoan.name.trim().toLowerCase() ==
+                loan.name.trim().toLowerCase() &&
+            existingLoan.serialNumber == loan.serialNumber &&
+            existingLoan.jewelleryName == loan.jewelleryName,
       )) {
-        _showSnackbar('Error', 'Serial number already exists');
+        _showSnackbar(
+          'Error',
+          'A loan with this customer, serial number, and jewellery already exists',
+        );
         return;
       }
 
       loanBox.add(loan);
       loans.add(loan);
       filteredLoans.value = loans;
+
+      // Force UI refresh to update grouping
+      refreshLoanCalculations();
+
+      // Print all loans to console for debugging
+      printAllLoans();
+
       _showSnackbar('Success', 'Loan added successfully');
 
       // Navigate back to loan home page
@@ -100,6 +121,28 @@ class LoanController extends GetxController {
       update();
     } catch (e) {
       print('Error updating amount by serial: $e');
+      _showSnackbar('Error', 'Failed to update amount');
+    }
+  }
+
+  void updateReceivedAmountByLoanId(String loanId, double amount) {
+    try {
+      final loanIndex = loans.indexWhere((loan) => loan.loanId == loanId);
+      if (loanIndex == -1) {
+        _showSnackbar('Error', 'Loan not found');
+        return;
+      }
+
+      final loan = loans[loanIndex];
+      loan.amountReceived = amount;
+      loan.save();
+      loans[loanIndex] = loan;
+      filteredLoans.value = loans;
+
+      // Force UI update
+      update();
+    } catch (e) {
+      print('Error updating amount by loan ID: $e');
       _showSnackbar('Error', 'Failed to update amount');
     }
   }
@@ -401,9 +444,25 @@ class LoanController extends GetxController {
 
   List<String> getUniqueCustomerNames() {
     try {
-      final customerNames = loans.map((loan) => loan.name).toSet().toList();
-      customerNames.sort();
-      return customerNames;
+      final customerNames = <String>{};
+      for (final loan in loans) {
+        final normalizedName = loan.name.trim().toLowerCase();
+        // Find if we already have a name with same normalized form
+        bool found = false;
+        for (final existingName in customerNames) {
+          if (existingName.trim().toLowerCase() == normalizedName) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          customerNames.add(
+            loan.name.trim(),
+          ); // Use trimmed original name to preserve formatting
+        }
+      }
+      final sortedNames = customerNames.toList()..sort();
+      return sortedNames;
     } catch (e) {
       print('Error getting customer names: $e');
       return [];
@@ -446,9 +505,10 @@ class LoanController extends GetxController {
 
   List<Loan> getLoansByCustomerName(String customerName) {
     try {
+      final normalizedCustomerName = customerName.trim().toLowerCase();
       return loans
           .where(
-            (loan) => loan.name.toLowerCase() == customerName.toLowerCase(),
+            (loan) => loan.name.trim().toLowerCase() == normalizedCustomerName,
           )
           .toList();
     } catch (e) {
@@ -462,10 +522,24 @@ class LoanController extends GetxController {
       final groupedLoans = <String, List<Loan>>{};
       // Use filteredLoans instead of loans for search functionality
       for (final loan in filteredLoans) {
-        if (groupedLoans.containsKey(loan.name)) {
-          groupedLoans[loan.name]!.add(loan);
+        // Normalize customer name for proper grouping
+        final normalizedName = loan.name.trim().toLowerCase();
+
+        // Find existing group with same normalized name
+        String? existingKey;
+        for (final key in groupedLoans.keys) {
+          if (key.trim().toLowerCase() == normalizedName) {
+            existingKey = key;
+            break;
+          }
+        }
+
+        if (existingKey != null) {
+          // Add to existing group
+          groupedLoans[existingKey]!.add(loan);
         } else {
-          groupedLoans[loan.name] = [loan];
+          // Create new group using the original name (preserving case and formatting)
+          groupedLoans[loan.name.trim()] = [loan];
         }
       }
       return groupedLoans;
@@ -563,6 +637,17 @@ class LoanController extends GetxController {
       return loanIndex != -1 ? loans[loanIndex] : null;
     } catch (e) {
       print('Error getting loan by serial: $e');
+      return null;
+    }
+  }
+
+  // Get loan by loan ID
+  Loan? getLoanByLoanId(String loanId) {
+    try {
+      final loanIndex = loans.indexWhere((loan) => loan.loanId == loanId);
+      return loanIndex != -1 ? loans[loanIndex] : null;
+    } catch (e) {
+      print('Error getting loan by loan ID: $e');
       return null;
     }
   }
@@ -702,6 +787,203 @@ class LoanController extends GetxController {
       print('Error calculating total early repayment amount: $e');
       return 0.0;
     }
+  }
+
+  // Method to print raw loan data to console for debugging
+  void printAllLoans() {
+    print('\n=== RAW LOAN DATA FROM HIVE ===');
+    print('Total loans in database: ${loanBox.length}');
+    print('Total loans in memory: ${loans.length}');
+    print('---');
+
+    if (loanBox.isEmpty) {
+      print('No loans found in database.');
+      return;
+    }
+
+    // Print raw data from Hive box
+    for (int i = 0; i < loanBox.length; i++) {
+      final loan = loanBox.getAt(i);
+      if (loan != null) {
+        print('Raw Loan ${i + 1} (Hive Index: $i):');
+        print('  name: "${loan.name}"');
+        print('  phone: "${loan.phone}"');
+        print('  address: "${loan.address}"');
+        print('  serialNumber: "${loan.serialNumber}"');
+        print('  jewelleryName: "${loan.jewelleryName}"');
+        print('  type: "${loan.type}"');
+        print('  amountGiven: ${loan.amountGiven}');
+        print('  amountReceived: ${loan.amountReceived}');
+        print('  interestRate: ${loan.interestRate}');
+        print('  duration: ${loan.duration}');
+        print('  date: ${loan.date}');
+        print('  nepaliDateString: "${loan.nepaliDateString}"');
+        print('  loanId: "${loan.loanId}"');
+        print('  description: "${loan.description}"');
+        print('  partialRepayments: ${loan.partialRepayments.length} items');
+        for (int j = 0; j < loan.partialRepayments.length; j++) {
+          final repayment = loan.partialRepayments[j];
+          print(
+            '    Repayment $j: amount=${repayment.amount}, date=${repayment.date}, daysSinceLoan=${repayment.daysSinceLoan}',
+          );
+        }
+        print('  ---');
+      }
+    }
+
+    print('\n=== CUSTOMER GROUPING ANALYSIS ===');
+    final groupedLoans = getLoansGroupedByCustomer();
+    print('Grouped customers: ${groupedLoans.length}');
+    print('---');
+
+    if (groupedLoans.isEmpty) {
+      print('No customers found after grouping.');
+      return;
+    }
+
+    // Print grouped data in the requested format
+    groupedLoans.forEach((customerName, customerLoans) {
+      print('Customer: "$customerName" (${customerLoans.length} loans)');
+      print('---');
+
+      for (int i = 0; i < customerLoans.length; i++) {
+        final loan = customerLoans[i];
+        print(
+          'Loan ${i + 1} → Serial: "${loan.serialNumber}" | Jewellery: "${loan.jewelleryName}" | Amount: ${loan.amountGiven} | Interest: ${loan.interestRate}%',
+        );
+        print('  Phone: ${loan.phone}');
+        print('  Address: ${loan.address}');
+        print('  Date: ${loan.nepaliDateString}');
+        print('  Due Amount: NPR ${loan.dueAmount.toStringAsFixed(2)}');
+        print('  ---');
+      }
+    });
+
+    print('\n=== GROUPING VERIFICATION ===');
+    print('Total individual loans: ${loans.length}');
+    print('Total grouped customers: ${groupedLoans.length}');
+    int totalLoansInGroups = groupedLoans.values.fold(
+      0,
+      (sum, loanList) => sum + loanList.length,
+    );
+    print('Total loans in groups: $totalLoansInGroups');
+    print(
+      'Grouping successful: ${loans.length == totalLoansInGroups ? "✅ YES" : "❌ NO"}',
+    );
+    print('========================\n');
+  }
+
+  // Method to verify and fix customer grouping issues
+  void verifyCustomerGrouping() {
+    print('\n=== CUSTOMER GROUPING VERIFICATION ===');
+
+    // Get all unique customer names
+    final allCustomerNames = <String>{};
+    final nameVariations = <String, List<String>>{};
+
+    for (final loan in loans) {
+      final name = loan.name.trim();
+      final normalizedName = name.toLowerCase();
+
+      allCustomerNames.add(name);
+
+      // Track variations of the same name
+      if (nameVariations.containsKey(normalizedName)) {
+        if (!nameVariations[normalizedName]!.contains(name)) {
+          nameVariations[normalizedName]!.add(name);
+        }
+      } else {
+        nameVariations[normalizedName] = [name];
+      }
+    }
+
+    print('Total unique names (case-sensitive): ${allCustomerNames.length}');
+    print('Total unique names (case-insensitive): ${nameVariations.length}');
+
+    // Check for name variations that should be grouped
+    nameVariations.forEach((normalizedName, variations) {
+      if (variations.length > 1) {
+        print('⚠️  Name variations found for "$normalizedName":');
+        for (final variation in variations) {
+          print('    - "$variation"');
+        }
+      }
+    });
+
+    // Test grouping function
+    final groupedLoans = getLoansGroupedByCustomer();
+    print('\nGrouping Results:');
+    print('Customers after grouping: ${groupedLoans.length}');
+
+    groupedLoans.forEach((customerName, customerLoans) {
+      print('Customer: "$customerName" (${customerLoans.length} loans)');
+      for (final loan in customerLoans) {
+        print(
+          '  - Serial: "${loan.serialNumber}" | Jewellery: "${loan.jewelleryName}"',
+        );
+      }
+    });
+
+    print('========================\n');
+  }
+
+  // Method to clean up customer names (normalize them)
+  void normalizeCustomerNames() {
+    print('\n=== NORMALIZING CUSTOMER NAMES ===');
+
+    bool hasChanges = false;
+    final nameMapping = <String, String>{};
+
+    // Find all name variations and create mapping
+    final nameVariations = <String, List<String>>{};
+
+    for (final loan in loans) {
+      final name = loan.name.trim();
+      final normalizedName = name.toLowerCase();
+
+      if (nameVariations.containsKey(normalizedName)) {
+        if (!nameVariations[normalizedName]!.contains(name)) {
+          nameVariations[normalizedName]!.add(name);
+        }
+      } else {
+        nameVariations[normalizedName] = [name];
+      }
+    }
+
+    // Create mapping to standardize names
+    nameVariations.forEach((normalizedName, variations) {
+      if (variations.length > 1) {
+        // Use the first variation as the standard
+        final standardName = variations.first;
+        for (final variation in variations) {
+          if (variation != standardName) {
+            nameMapping[variation] = standardName;
+          }
+        }
+      }
+    });
+
+    // Apply the mapping
+    for (final loan in loans) {
+      final currentName = loan.name.trim();
+      if (nameMapping.containsKey(currentName)) {
+        final newName = nameMapping[currentName]!;
+        print('Normalizing: "$currentName" → "$newName"');
+        loan.name = newName;
+        loan.save();
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      print('✅ Customer names normalized successfully');
+      // Reload loans to reflect changes
+      loadLoans();
+    } else {
+      print('✅ No name normalization needed');
+    }
+
+    print('========================\n');
   }
 
   // Helper method to request appropriate storage permissions
@@ -1212,5 +1494,372 @@ class LoanController extends GetxController {
         ),
       ],
     );
+  }
+
+  // Export specific customer's loans to PDF
+  Future<void> exportCustomerLoansToPDF(String customerName) async {
+    try {
+      isLoading.value = true;
+
+      // Check and request appropriate permissions
+      bool permissionGranted = await _requestStoragePermissions();
+
+      if (!permissionGranted) {
+        _showSnackbar(
+          'Error',
+          'Storage permission is required to save PDF. Please grant permission in app settings.',
+        );
+        return;
+      }
+
+      // Get customer's loans
+      final customerLoans = getLoansByCustomerName(customerName);
+      if (customerLoans.isEmpty) {
+        _showSnackbar('Error', 'No loans found for customer: $customerName');
+        return;
+      }
+
+      // Create PDF document
+      final pdf = pw.Document();
+
+      // Add pages to PDF
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Customer Loan Report',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.Text(
+                          'Customer: $customerName',
+                          style: pw.TextStyle(
+                            fontSize: 16,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blue,
+                          ),
+                        ),
+                        pw.Text(
+                          'Generated on: ${DateTime.now().toString().substring(0, 19)}',
+                          style: const pw.TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.blue,
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(8),
+                        ),
+                      ),
+                      child: pw.Text(
+                        '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Customer Summary Section
+              pw.Container(
+                margin: const pw.EdgeInsets.only(top: 20, bottom: 20),
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(8),
+                  ),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Customer Summary',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Amount Given',
+                            'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountGiven).toStringAsFixed(2)}',
+                            PdfColors.blue,
+                          ),
+                        ),
+                        pw.SizedBox(width: 10),
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Amount Received',
+                            'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountReceived).toStringAsFixed(2)}',
+                            PdfColors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Total Due Amount',
+                            'NPR ${getTotalDueAmountForCustomer(customerName).toStringAsFixed(2)}',
+                            PdfColors.red,
+                          ),
+                        ),
+                        pw.SizedBox(width: 10),
+                        pw.Expanded(
+                          child: _buildSummaryBox(
+                            'Overdue Status',
+                            isCustomerOverdue(customerName) ? 'Yes' : 'No',
+                            isCustomerOverdue(customerName)
+                                ? PdfColors.red
+                                : PdfColors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Customer Information
+              pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 20),
+                padding: const pw.EdgeInsets.all(15),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(8),
+                  ),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Customer Information',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    pw.Text('Name: $customerName'),
+                    pw.Text('Phone: ${customerLoans.first.phone}'),
+                    pw.Text('Address: ${customerLoans.first.address}'),
+                  ],
+                ),
+              ),
+
+              // Individual Loans Section
+              ..._buildCustomerLoansSectionForPDF(customerName, customerLoans),
+            ];
+          },
+        ),
+      );
+
+      // Save PDF to device
+      Directory? output;
+      try {
+        // Try to save to Downloads directory (doesn't require permissions on modern Android)
+        if (Platform.isAndroid) {
+          output = Directory('/storage/emulated/0/Download');
+          if (!await output.exists()) {
+            // Fallback to external storage directory
+            output = await getExternalStorageDirectory();
+            output ??= await getApplicationDocumentsDirectory();
+          }
+        } else {
+          // For iOS and other platforms
+          output = await getApplicationDocumentsDirectory();
+        }
+      } catch (e) {
+        print('Error getting storage directory: $e');
+        output = await getTemporaryDirectory();
+      }
+
+      final file = File(
+        '${output.path}/customer_loans_${customerName.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      await file.writeAsBytes(await pdf.save());
+
+      // Open the PDF file
+      await OpenFile.open(file.path);
+
+      _showSnackbar('Success', 'Customer PDF exported successfully and opened');
+    } catch (e) {
+      print('Error exporting customer PDF: $e');
+      _showSnackbar('Error', 'Failed to export customer PDF: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  List<pw.Widget> _buildCustomerLoansSectionForPDF(
+    String customerName,
+    List<Loan> customerLoans,
+  ) {
+    final widgets = <pw.Widget>[];
+    final isOverdue = isCustomerOverdue(customerName);
+
+    widgets.add(
+      pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 20),
+        padding: const pw.EdgeInsets.all(15),
+        decoration: pw.BoxDecoration(
+          color: isOverdue ? PdfColors.red50 : PdfColors.white,
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+          border: pw.Border.all(
+            color: isOverdue ? PdfColors.red : PdfColors.grey300,
+          ),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Individual Loans Table
+            pw.Text(
+              'Individual Loans:',
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 10),
+
+            // Table Header
+            pw.Container(
+              padding: pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey200,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Row(
+                children: [
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Serial',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                      'Jewellery',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Given',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Received',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Due',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Status',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Table Rows
+            ...customerLoans
+                .map(
+                  (loan) => pw.Container(
+                    margin: pw.EdgeInsets.only(top: 2),
+                    padding: pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: loan.isOverdue ? PdfColors.red50 : PdfColors.white,
+                      borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                      border: pw.Border.all(color: PdfColors.grey300),
+                    ),
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(flex: 2, child: pw.Text(loan.serialNumber)),
+                        pw.Expanded(
+                          flex: 3,
+                          child: pw.Text(loan.jewelleryName),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            'NPR ${loan.amountReceived.toStringAsFixed(2)}',
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            'NPR ${loan.dueAmount.toStringAsFixed(2)}',
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            loan.isOverdue ? 'Overdue' : 'Active',
+                            style: pw.TextStyle(
+                              color: loan.isOverdue
+                                  ? PdfColors.red
+                                  : PdfColors.green,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ],
+        ),
+      ),
+    );
+
+    return widgets;
   }
 }
