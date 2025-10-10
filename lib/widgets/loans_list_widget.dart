@@ -22,7 +22,7 @@ class LoansListWidget extends StatelessWidget {
     return Container(
       margin: padding.copyWith(top: 0),
       child: Card(
-        elevation: 2,
+        elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           decoration: BoxDecoration(
@@ -36,25 +36,29 @@ class LoansListWidget extends StatelessWidget {
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 decoration: BoxDecoration(
-                  color: Colors.blue[50],
+                  color: const Color.fromARGB(255, 204, 21, 27).withOpacity(0.06),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
                   ),
-                  border: Border(bottom: BorderSide(color: Colors.blue[200]!)),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: const Color.fromARGB(255, 204, 21, 27).withOpacity(0.25),
+                    ),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.people, color: Colors.blue[700]),
+                    const Icon(Icons.people, color: Color.fromARGB(255, 204, 21, 27)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Customer Loans (${customerNames.length})',
+                    const Text(
+                      'Customer Loans',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[700],
+                        fontWeight: FontWeight.w600,
+                        color: Color.fromARGB(255, 204, 21, 27),
                       ),
                     ),
                     const Spacer(),
@@ -65,15 +69,15 @@ class LoansListWidget extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue[100],
+                          color: const Color.fromARGB(255, 204, 21, 27).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          'Total: $totalLoansCount loans',
+                        child: const Text(
+                          'Total Loans',
                           style: TextStyle(
-                            color: Colors.blue[700],
+                            color: Color.fromARGB(255, 204, 21, 27),
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
@@ -83,14 +87,15 @@ class LoansListWidget extends StatelessWidget {
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 itemCount: customerNames.length,
                 itemBuilder: (context, index) {
                   final customerName = customerNames[index];
                   final customerLoans = groupedLoans[customerName]!;
                   return AnimatedContainer(
+                    margin: const EdgeInsets.symmetric(vertical: 2),
                     duration: Duration(milliseconds: 200 + (index * 50)),
-                    curve: Curves.easeOutBack,
+                    curve: Curves.easeOutCubic,
                     child: CustomerTile(
                       customerName: customerName,
                       customerLoans: customerLoans,

@@ -19,117 +19,152 @@ class CustomerTile extends StatelessWidget {
     final controller = Get.find<LoanController>();
     final isOverdue = controller.isCustomerOverdue(customerName);
 
+    // Aggregates for this customer
+    final totalGiven =
+        customerLoans.fold(0.0, (sum, loan) => sum + loan.amountGiven);
+    final totalDue = customerLoans.fold(0.0, (sum, loan) => sum + loan.dueAmount);
+
+    // Theme color (requested red)
+    final themeRed = const Color.fromARGB(255, 204, 21, 27);
+    final baseColor = themeRed;
+
+    // Responsiveness
+    final width = MediaQuery.of(context).size.width;
+    final isDesktopLike = width > 768 || GetPlatform.isDesktop;
+
+    final double titleSize = isDesktopLike ? 18 : 16;
+    final double subTextSize = isDesktopLike ? 12 : 11;
+    final double tilePadding = isDesktopLike ? 16 : 12;
+
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
         onTap: () => _showCustomerDetails(),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(tilePadding),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             gradient: LinearGradient(
-              colors: isOverdue
-                  ? [Colors.red[50]!, Colors.red[100]!]
-                  : [Colors.blue[50]!, Colors.blue[100]!],
+              colors: [baseColor.withOpacity(0.03), baseColor.withOpacity(0.08)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
+            border: Border.all(color: baseColor.withOpacity(0.2)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Customer Icon
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isOverdue ? Colors.red[200] : Colors.blue[200],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.person,
-                  color: isOverdue ? Colors.red[700] : Colors.blue[700],
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Customer Name and Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      customerName,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: isOverdue ? Colors.red[700] : Colors.blue[700],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isOverdue ? Colors.red[600] : Colors.blue[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Status Indicators
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (isOverdue)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'OVERDUE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
+                  // Customer Icon
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isOverdue ? Colors.red : Colors.blue,
-                      borderRadius: BorderRadius.circular(16),
+                      color: baseColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      '${customerLoans.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Icon(
+                      Icons.person,
+                      color: baseColor,
+                      size: isDesktopLike ? 28 : 24,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'loan${customerLoans.length > 1 ? 's' : ''}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isOverdue ? Colors.red[600] : Colors.blue[600],
-                      fontWeight: FontWeight.w500,
+                  const SizedBox(width: 14),
+
+                  // Name and loan count
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          customerName,
+                          style: TextStyle(
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.w600,
+                            color: baseColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.assignment,
+                              size: isDesktopLike ? 14 : 12,
+                              color: baseColor.withOpacity(0.8),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${customerLoans.length} loan${customerLoans.length > 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: subTextSize,
+                                color: baseColor.withOpacity(0.9),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Status / Chevron
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (isOverdue)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'OVERDUE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Icon(
+                        Icons.chevron_right,
+                        color: baseColor,
+                        size: isDesktopLike ? 24 : 20,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // Totals row (icons removed per request)
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricCard(
+                      context,
+                      label: 'Total Given',
+                      value: 'NPR ${totalGiven.toStringAsFixed(2)}',
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildMetricCard(
+                      context,
+                      label: 'Total Due',
+                      value: 'NPR ${totalDue.toStringAsFixed(2)}',
+                      color: totalDue > 0 ? Colors.red : Colors.green,
                     ),
                   ),
                 ],
@@ -137,6 +172,57 @@ class CustomerTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    final width = MediaQuery.of(context).size.width;
+    final isDesktopLike = width > 768 || GetPlatform.isDesktop;
+    final double cardPadding = isDesktopLike ? 12 : 10;
+    final double labelSize = isDesktopLike ? 11 : 10;
+    final double valueSize = isDesktopLike ? 14 : 13;
+
+    return Container(
+      padding: EdgeInsets.all(cardPadding),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: labelSize,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: valueSize,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
