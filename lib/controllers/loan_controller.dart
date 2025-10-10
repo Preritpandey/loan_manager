@@ -165,8 +165,11 @@ class LoanController extends GetxController {
 
       final loan = loans[loanIndex];
 
-      // Compute outstanding due as of the repayment date (no settlement enforcement)
-      final outstanding = loan.outstandingDueAt(date, forSettlement: false);
+      // Clamp future-dated repayments to today so the change reflects immediately in dueAmount
+      final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
+
+      // Compute outstanding due as of the effective repayment date (no settlement enforcement)
+      final outstanding = loan.outstandingDueAt(effectiveDate, forSettlement: false);
 
       // Do not allow overpayment; prevent negative balances
       if (amount - outstanding > 0.005) {
@@ -181,7 +184,7 @@ class LoanController extends GetxController {
       // If amount is slightly more due to rounding, clamp to outstanding
       final adjustedAmount = amount > outstanding ? outstanding : amount;
 
-      loan.addPartialRepayment(adjustedAmount, date);
+      loan.addPartialRepayment(adjustedAmount, effectiveDate);
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
@@ -213,8 +216,11 @@ class LoanController extends GetxController {
 
       final loan = loans[loanIndex];
 
+      // Clamp future-dated repayments to today so the change reflects immediately in dueAmount
+      final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
+
       // Settlement due allows min-30 enforcement
-      final outstanding = loan.outstandingDueAt(date, forSettlement: true);
+      final outstanding = loan.outstandingDueAt(effectiveDate, forSettlement: true);
 
       // Do not allow overpayment; prevent negative balances
       if (amount - outstanding > 0.005) {
@@ -227,7 +233,7 @@ class LoanController extends GetxController {
 
       final adjustedAmount = amount > outstanding ? outstanding : amount;
 
-      loan.addPartialRepayment(adjustedAmount, date);
+      loan.addPartialRepayment(adjustedAmount, effectiveDate);
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
@@ -252,7 +258,9 @@ class LoanController extends GetxController {
         return;
       }
       final loan = loans[loanIndex];
-      loan.addTopUp(amount, date);
+      // Clamp future-dated top-ups to today so the change reflects immediately in dueAmount
+      final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
+      loan.addTopUp(amount, effectiveDate);
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
