@@ -25,7 +25,9 @@ class LoanStatementTiles extends StatelessWidget {
         final isWide = constraints.maxWidth > 700;
 
         // Compute additional/top-up statistics from negative partial repayments
-        final int additionalCount = loan.partialRepayments.where((r) => r.amount < 0).length;
+        final int additionalCount = loan.partialRepayments
+            .where((r) => r.amount < 0)
+            .length;
         final double additionalTotal = loan.partialRepayments
             .where((r) => r.amount < 0)
             .fold(0.0, (sum, r) => sum + (-r.amount));
