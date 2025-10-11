@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/customer_loans_list_widget.dart';
+import 'package:list/widgets/search_results_indicator_widget.dart';
 
 class CustomerLoansPage extends StatefulWidget {
   final String customerName;
@@ -20,11 +21,31 @@ class CustomerLoansPage extends StatefulWidget {
 
 class _CustomerLoansPageState extends State<CustomerLoansPage> {
   late LoanController controller;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     controller = Get.find<LoanController>();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<Loan> _getFilteredLoans() {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return widget.customerLoans;
+    return widget.customerLoans.where((loan) {
+      final serial = loan.serialNumber.toLowerCase();
+      final jewellery = loan.jewelleryName.toLowerCase();
+      return serial.contains(q) || jewellery.contains(q);
+    }).toList();
   }
 
   @override
@@ -82,10 +103,92 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
                 _buildCustomerSummaryCard(),
                 const SizedBox(height: 16),
 
+                // Search Bar for this customer's loans
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        colors: [Colors.white, Colors.grey[50]!],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                      onSubmitted: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: isDesktop
+                            ? 'Search by serial number or jewellery name'
+                            : 'Serial number or jewellery name',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        prefixIcon: Container(
+                          margin: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.search,
+                              color: Colors.blue[700], size: 20),
+                        ),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (_searchQuery.isNotEmpty)
+                  SearchResultsIndicatorWidget(
+                    resultCount: _getFilteredLoans().length,
+                    padding:
+                        EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                    isDesktop: isDesktop,
+                    onClear: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchQuery = '';
+                      });
+                    },
+                  ),
+
                 // Individual Loans List
                 CustomerLoansListWidget(
                   customerName: widget.customerName,
-                  customerLoans: widget.customerLoans,
+                  customerLoans: _getFilteredLoans(),
                 ),
               ],
             ),

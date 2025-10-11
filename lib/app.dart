@@ -6,6 +6,7 @@ import 'package:list/pages/add_loan_page.dart';
 import 'package:list/pages/loan_page.dart';
 import 'package:list/pages/otp_verification_screen.dart';
 import 'package:list/pages/splash_screen.dart';
+import 'package:list/pages/cash_deposits_page.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -21,6 +22,7 @@ class MyApp extends StatelessWidget {
         GetPage(name: '/add', page: () => AddLoanPage()),
         GetPage(name: '/otp', page: () => OtpScreen()),
         GetPage(name: '/splash', page: () => SplashScreen()),
+        GetPage(name: '/cash-deposits', page: () => const CashDepositsPage()),
       ],
       initialBinding: BindingsBuilder(() {
         Get.put(AuthController());

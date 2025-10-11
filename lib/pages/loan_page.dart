@@ -194,6 +194,24 @@ class _LoanHomePageState extends State<LoanHomePage>
                         totalReceived: controller.getTotalReceivedAmount(),
                       ),
 
+                      // Cash Deposits section
+                      Padding(
+                        padding: padding,
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: ListTile(
+                            leading: const Icon(Icons.account_balance_wallet),
+                            title: const Text('Cash Deposits', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Record and manage cash deposits with manual Nepali dates'),
+                            trailing: ElevatedButton(
+                              onPressed: () => Get.toNamed('/cash-deposits'),
+                              child: const Text('Open'),
+                            ),
+                          ),
+                        ),
+                      ),
+
                       // Loans List
                       LoansListWidget(
                         customerNames: customerNames,

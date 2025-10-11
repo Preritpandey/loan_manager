@@ -134,6 +134,11 @@ class NepaliDate {
     return index != -1 ? index + 1 : null;
   }
 
+  // Public wrapper to allow external files to access month number by name
+  static int? getMonthNumber(String monthName) {
+    return _getMonthNumber(monthName);
+  }
+
   static bool isValid(int year, int month, int day) {
     // Quick range checks first
     if (year < 1970 || year > 2200) return false;

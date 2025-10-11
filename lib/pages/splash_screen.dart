@@ -1,4 +1,3 @@
-
 // screens/splash_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -23,14 +22,10 @@ class SplashScreen extends StatelessWidget {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.security,
-                size: 60,
-                color: Colors.blue,
-              ),
+              child: Icon(Icons.security, size: 60, color: Colors.blue),
             ),
             SizedBox(height: 30),
-            
+
             // App Name
             Text(
               'OTP Verification',
@@ -41,11 +36,13 @@ class SplashScreen extends StatelessWidget {
               ),
             ),
             SizedBox(height: 20),
-            
+
             // Loading indicator
-            Obx(() => authController.isCheckingStatus.value
-                ? CircularProgressIndicator(color: Colors.white)
-                : SizedBox()),
+            Obx(
+              () => authController.isCheckingStatus.value
+                  ? CircularProgressIndicator(color: Colors.white)
+                  : SizedBox(),
+            ),
           ],
         ),
       ),
