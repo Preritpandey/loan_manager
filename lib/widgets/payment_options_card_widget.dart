@@ -22,8 +22,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
 
   // Controllers for different payment types
   final TextEditingController _interestOnlyController = TextEditingController();
-  final TextEditingController _principalOnlyController =
-      TextEditingController();
+  final TextEditingController _principalOnlyController = TextEditingController();
   final TextEditingController _principalDaysController = TextEditingController(
     text: '0',
   );
@@ -40,11 +39,42 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
 
   // Selected collection date (BS)
   NepaliDate _selectedNepaliDate = NepaliDate.today();
+  // Interest-only: selected Nepali date to compute days between loan issued date and this date
+  NepaliDate _interestNepaliDate = NepaliDate.today();
 
   @override
   void initState() {
     super.initState();
     _updateCalculations();
+  }
+
+  Future<void> _pickInterestNepaliDate() async {
+    final initial = picker.NepaliDateTime(
+      _interestNepaliDate.year,
+      _interestNepaliDate.month,
+      _interestNepaliDate.day,
+    );
+    final selected = await picker.showMaterialDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: picker.NepaliDateTime(2000, 1, 1),
+      lastDate: picker.NepaliDateTime(2200, 12, 30),
+    );
+    if (selected != null) {
+      setState(() {
+        _interestNepaliDate = NepaliDate(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+        // Update days and interest
+        final loanStartBs = widget.loan.nepaliDate;
+        _selectedInterestDays =
+            NepaliDate.daysBetween(loanStartBs, _interestNepaliDate);
+        if (_selectedInterestDays < 0) _selectedInterestDays = 0;
+        _calculatedInterest = _calculateInterestForDays(_selectedInterestDays);
+      });
+    }
   }
 
   @override
@@ -63,16 +93,23 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
 
   void _updateCalculations() {
     setState(() {
-      _calculatedInterest = _calculateInterestForDays(_selectedInterestDays);
-      _remainingPrincipal = widget.loan.remainingPrincipal;
+      // Recompute selected days for interest-only using Nepali date diff
+      final loanStartBs = widget.loan.nepaliDate;
+      _selectedInterestDays = NepaliDate.daysBetween(loanStartBs, _interestNepaliDate);
+      if (_selectedInterestDays < 0) _selectedInterestDays = 0;
+      // Compute as-of date in AD for ledger-based calculations
+      final asOf = _interestNepaliDate.toGregorian();
+      // Interest to collect = accrued interest at asOf without min-30 enforcement
+      _calculatedInterest = widget.loan.accruedInterestAt(asOf, forSettlement: false);
+      // Show remaining principal as of the same date
+      _remainingPrincipal = widget.loan.remainingPrincipalAt(asOf);
     });
   }
 
   double _calculateInterestForDays(int days) {
-    return (widget.loan.remainingPrincipal *
-            widget.loan.dailyInterestRate *
-            days) /
-        100;
+    // Deprecated in favor of ledger-based computation at selected date
+    final asOf = _interestNepaliDate.toGregorian();
+    return widget.loan.accruedInterestAt(asOf, forSettlement: false);
   }
 
   void _showConfirmationDialog(String type, double amount, {int days = 0}) {
@@ -81,6 +118,10 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
       _confirmationType = type;
       _confirmationAmount = amount;
       _confirmationDays = days;
+      if (type == 'interest') {
+        // Sync collection date with the interest calculation date
+        _selectedNepaliDate = _interestNepaliDate;
+      }
     });
   }
 
@@ -122,11 +163,19 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
 
   Future<void> _processPrincipalPayment() async {
     // Add principal payment with optional days-based interest
-    final success = await _controller.addPrincipalRepaymentWithInterest(
-      _confirmationAmount,
-      _confirmationDays,
-      _selectedNepaliDate.toGregorian(),
-    );
+    bool success = false;
+    if (_confirmationDays == 0) {
+      success = await _controller.addPrincipalOnlyPayment(
+        _confirmationAmount,
+        _selectedNepaliDate.toGregorian(),
+      );
+    } else {
+      success = await _controller.addPrincipalRepaymentWithInterest(
+        _confirmationAmount,
+        _confirmationDays,
+        _selectedNepaliDate.toGregorian(),
+      );
+    }
     if (success) {
       if (_confirmationDays > 0) {
         _showSuccessSnackbar(
@@ -225,52 +274,38 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Principal remains unchanged. Choose number of days to charge interest for:',
+            'Principal remains unchanged. Select a Nepali date to auto-calculate the days since loan date:',
             style: TextStyle(color: Colors.orange[800], fontSize: 12),
           ),
           const SizedBox(height: 12),
 
-          // Quick day selection buttons + custom option
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          // Date selector for interest-only calculation (BS)
+          Row(
             children: [
-              ...[10, 30, 60, 90, 180, 365].map(
-                (days) =>
-                    _buildDayButton(days, _selectedInterestDays == days, () {
-                      setState(() {
-                        _selectedInterestDays = days;
-                        _updateCalculations();
-                      });
-                    }),
-              ),
-              GestureDetector(
-                onTap: () async {
-                  await _showCustomDayInput(context);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange[300]!),
-                  ),
-                  child: Text(
-                    'Custom…',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.orange[700],
-                    ),
-                  ),
+              Icon(Icons.event, color: Colors.orange[700]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Calculate up to (BS): ${_interestNepaliDate.format()}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
+              ),
+              TextButton.icon(
+                onPressed: _pickInterestNepaliDate,
+                icon: const Icon(Icons.edit_calendar),
+                label: const Text('Change'),
               ),
             ],
           ),
 
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'From ${widget.loan.nepaliDate.format()} to ${_interestNepaliDate.format()} = $_selectedInterestDays days',
+              style: TextStyle(color: Colors.orange[800], fontSize: 12),
+            ),
+          ),
           const SizedBox(height: 12),
 
           // Interest calculation display
@@ -776,41 +811,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     }
   }
 
-  Future<void> _showCustomDayInput(BuildContext context) async {
-    int selected = _selectedInterestDays;
-    final controller = TextEditingController(text: selected.toString());
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Custom Days'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(labelText: 'Enter number of days'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final v = int.tryParse(controller.text) ?? 0;
-              if (v > 0) {
-                setState(() {
-                  _selectedInterestDays = v;
-                  _updateCalculations();
-                });
-                Navigator.of(ctx).pop();
-              }
-            },
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed: custom day input deprecated in favor of Nepali date selection
 
   Future<void> _processOverallPayment() async {
     final success = await _controller.addOverallPayment(
@@ -836,29 +837,7 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     }
   }
 
-  Widget _buildDayButton(int days, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.orange[700] : Colors.orange[50],
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? Colors.orange[700]! : Colors.orange[300]!,
-          ),
-        ),
-        child: Text(
-          '$days days',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.white : Colors.orange[700],
-          ),
-        ),
-      ),
-    );
-  }
+  // Removed: day buttons replaced by Nepali date selection
 
   Widget _buildCalculationRow(
     String label,

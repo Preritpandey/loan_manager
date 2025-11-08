@@ -12,8 +12,8 @@ import 'package:list/widgets/payment_options_card_widget.dart';
 import 'package:list/widgets/loan_statement_tiles_widget.dart';
 import 'package:list/widgets/customer_summary_card_widget.dart';
 import 'package:list/widgets/delete_loan_card_widget.dart';
-import 'package:list/widgets/customer_other_loans_widget.dart';
 import 'package:flutter/services.dart';
+import 'package:list/controllers/bank_loan_controller.dart';
 
 class LoanDetailPage extends StatefulWidget {
   final Loan loan;
@@ -27,9 +27,12 @@ class LoanDetailPage extends StatefulWidget {
 class _LoanDetailPageState extends State<LoanDetailPage> {
   late final LoanDetailOperationsController operationsController;
 
+  late final BankLoanController bankLoanController;
+
   @override
   void initState() {
     super.initState();
+    bankLoanController = Get.find<BankLoanController>();
     operationsController = Get.put(LoanDetailOperationsController());
     operationsController.initializeLoan(widget.loan);
   }
@@ -37,6 +40,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
   @override
   void dispose() {
     Get.delete<LoanDetailOperationsController>();
+    // Do not delete BankLoanController here; it's shared across the app.
     super.dispose();
   }
 
@@ -69,29 +73,78 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Center(
-        child: Container(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-            child: GetBuilder<LoanDetailOperationsController>(
-              builder: (ops) {
-                final loan = ops.loan;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Status Header
-                    LoanStatusHeader(loan: loan),
-                    const SizedBox(height: 8),
-                    _DurationOverrideBar(controller: operationsController),
+      body: SingleChildScrollView(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: maxWidth,
+              minHeight:
+                  MediaQuery.of(context).size.height -
+                  kToolbarHeight -
+                  MediaQuery.of(context).padding.top,
+            ),
+            child: Column(
+              children: [
+                // Add to Bank Button - Wrapped in Obx and referencing Rx to react to changes
+                Obx(() {
+                  // Access RxList bankLoans to ensure Obx has an observable dependency
+                  final isInBank = bankLoanController.bankLoans
+                      .any((b) => b.loanId == widget.loan.loanId);
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: isInBank
+                          ? null
+                          : () async {
+                              final success = await bankLoanController
+                                  .addLoanToBank(widget.loan);
+                              if (success) {
+                                Get.snackbar(
+                                  'Success',
+                                  'Loan added to bank collection',
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.green,
+                                  colorText: Colors.white,
+                                );
+                              } else {
+                                Get.snackbar(
+                                  'Error',
+                                  'Failed to add loan to bank',
+                                  snackPosition: SnackPosition.BOTTOM,
+                                  backgroundColor: Colors.red,
+                                  colorText: Colors.white,
+                                );
+                              }
+                            },
+                      icon: Icon(
+                        isInBank
+                            ? Icons.account_balance
+                            : Icons.account_balance_wallet,
+                      ),
+                      label: Text(isInBank ? 'Added to Bank' : 'Add to Bank'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isInBank ? Colors.grey : Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  );
+                }),
 
-                    if (isDesktop)
-                      _buildDesktopLayout(loan)
-                    else
-                      _buildMobileLayout(loan),
-                  ],
-                );
-              },
+                // Status Header
+                LoanStatusHeader(loan: widget.loan),
+                const SizedBox(height: 8),
+                _DurationOverrideBar(controller: operationsController),
+
+                if (isDesktop)
+                  _buildDesktopLayout(widget.loan)
+                else
+                  _buildMobileLayout(widget.loan),
+              ],
             ),
           ),
         ),
@@ -110,7 +163,7 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               PersonalInfoCard(loan: loan),
               LoanInfoCard(loan: loan),
               JewelleryInfoCard(loan: loan),
-              if (loan.description.isNotEmpty) DescriptionCard(loan: loan),
+              DescriptionCard(loan: loan),
             ],
           ),
         ),
@@ -125,7 +178,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               const SizedBox(height: 8),
               CustomerSummaryCard(loan: loan),
               const SizedBox(height: 8),
-              CustomerOtherLoansWidget(currentLoan: loan),
               PaymentOptionsCard(loan: loan),
               DeleteLoanCard(
                 loan: loan,
@@ -149,10 +201,9 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
         const SizedBox(height: 8),
         LoanStatementTiles(loan: loan),
         const SizedBox(height: 8),
-        if (loan.description.isNotEmpty) DescriptionCard(loan: loan),
+        DescriptionCard(loan: loan),
         CustomerSummaryCard(loan: loan),
         const SizedBox(height: 8),
-        CustomerOtherLoansWidget(currentLoan: loan),
         PaymentOptionsCard(loan: loan),
         DeleteLoanCard(
           loan: loan,

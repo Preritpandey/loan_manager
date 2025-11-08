@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
+import 'package:list/models/loan.dart';
 import 'package:list/widgets/loan_app_bar.dart';
 import 'package:list/widgets/search_bar_widget.dart';
 import 'package:list/widgets/search_suggestions_widget.dart';
@@ -11,6 +12,8 @@ import 'package:list/widgets/loading_state_widget.dart';
 import 'package:list/widgets/empty_state_widget.dart';
 import 'package:list/widgets/no_results_widget.dart';
 import 'package:list/widgets/floating_action_buttons_widget.dart';
+import 'package:list/controllers/bank_loan_controller.dart';
+import 'package:list/pages/bank_loans_page.dart';
 
 class LoanHomePage extends StatefulWidget {
   const LoanHomePage({super.key});
@@ -22,6 +25,7 @@ class LoanHomePage extends StatefulWidget {
 class _LoanHomePageState extends State<LoanHomePage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   final LoanController controller = Get.put(LoanController());
+  final RxBool _showOverdueOnly = false.obs;
   final searchController = TextEditingController();
   final searchFocusNode = FocusNode();
   late AnimationController _animationController;
@@ -40,6 +44,9 @@ class _LoanHomePageState extends State<LoanHomePage>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
+    
+    // Initialize BankLoanController
+    Get.put(BankLoanController());
   }
 
   @override
@@ -184,6 +191,26 @@ class _LoanHomePageState extends State<LoanHomePage>
                           },
                         ),
 
+                      // Bank Loans Button
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Get.to(() => BankLoansPage());
+                          },
+                          icon: const Icon(Icons.account_balance, size: 18),
+                          label: const Text('View Bank Deposits'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      
                       // Single Summary Card
                       LoanSummaryCard(
                         padding: padding,
@@ -192,6 +219,19 @@ class _LoanHomePageState extends State<LoanHomePage>
                         totalDue: controller.getTotalDueAmount(),
                         overdueLoans: controller.getOverdueLoansCount(),
                         totalReceived: controller.getTotalReceivedAmount(),
+                        totalPrincipalDue: controller.getTotalPrincipalDue(),
+                        totalInterestDue: controller.getTotalInterestDue(),
+                        onOverdueTap: () {
+                          _showOverdueOnly.value = !_showOverdueOnly.value;
+                          if (_showOverdueOnly.value) {
+                            // Show only overdue loans
+                            final overdueLoans = controller.getOverdueLoans();
+                            controller.filteredLoans.value = overdueLoans;
+                          } else {
+                            // Show all loans
+                            controller.filteredLoans.value = controller.loans;
+                          }
+                        },
                       ),
 
                       // Cash Deposits section
@@ -199,11 +239,18 @@ class _LoanHomePageState extends State<LoanHomePage>
                         padding: padding,
                         child: Card(
                           elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: ListTile(
                             leading: const Icon(Icons.account_balance_wallet),
-                            title: const Text('Cash Deposits', style: TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: const Text('Record and manage cash deposits with manual Nepali dates'),
+                            title: const Text(
+                              'Cash Deposits',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: const Text(
+                              'Record and manage cash deposits with manual Nepali dates',
+                            ),
                             trailing: ElevatedButton(
                               onPressed: () => Get.toNamed('/cash-deposits'),
                               child: const Text('Open'),
@@ -212,13 +259,67 @@ class _LoanHomePageState extends State<LoanHomePage>
                         ),
                       ),
 
+                      // Show message when only overdue loans are being shown
+                      if (_showOverdueOnly.value)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 8.0,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Text(
+                                'Showing overdue loans only. ',
+                                style: TextStyle(color: Colors.orange),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  _showOverdueOnly.value = false;
+                                  controller.filteredLoans.value =
+                                      controller.loans;
+                                },
+                                child: Text('Show all loans'),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size(0, 0),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                       // Loans List
                       LoansListWidget(
-                        customerNames: customerNames,
-                        groupedLoans: groupedLoans,
+                        customerNames: _showOverdueOnly.value
+                            ? controller
+                                  .getOverdueLoans()
+                                  .map((loan) => loan.name)
+                                  .toSet()
+                                  .toList()
+                            : customerNames,
+                        groupedLoans: _showOverdueOnly.value
+                            ? controller
+                                  .getOverdueLoans()
+                                  .fold<Map<String, List<Loan>>>({}, (
+                                    map,
+                                    loan,
+                                  ) {
+                                    map[loan.name] = controller
+                                        .getOverdueLoans()
+                                        .where((l) => l.name == loan.name)
+                                        .toList();
+                                    return map;
+                                  })
+                            : groupedLoans,
                         padding: padding,
                         isDesktop: isDesktop,
-                        totalLoansCount: controller.getTotalLoansCount(),
+                        totalLoansCount: _showOverdueOnly.value
+                            ? controller.getOverdueLoansCount()
+                            : controller.getTotalLoansCount(),
                       ),
 
                       // Bottom padding for FAB

@@ -310,20 +310,40 @@ class _StatementSectionState extends State<_StatementSection> {
       double principalPortion = 0.0;
       double extraInterest = 0.0;
 
-      // Pay accrued interest first
-      if (remaining > 0) {
-        final payInterest = remaining <= accrued ? remaining : accrued;
-        interestPortion += payInterest;
-        accrued -= payInterest;
-        remaining -= payInterest;
-      }
-
-      // Then principal
-      if (remaining > 0) {
+      // Principal-only marker: if daysSinceLoan == -2, do NOT pay accrued; reduce principal directly
+      if (remaining > 0 && r.daysSinceLoan == -2) {
         final payPrincipal = remaining >= principal ? principal : remaining;
         principalPortion += payPrincipal;
         principal -= payPrincipal;
         remaining -= payPrincipal;
+
+        if (remaining > 0) {
+          // Any leftover counted as extra interest safeguard (shouldn't normally occur)
+          extraInterest += remaining;
+          remaining = 0.0;
+        }
+      } else {
+        // Pay accrued interest first
+        if (remaining > 0) {
+          final payInterest = remaining <= accrued ? remaining : accrued;
+          interestPortion += payInterest;
+          accrued -= payInterest;
+          remaining -= payInterest;
+        }
+
+        // Interest-only marker: if daysSinceLoan < 0, do NOT reduce principal. Any remaining -> extra interest.
+        if (remaining > 0 && r.daysSinceLoan < 0) {
+          extraInterest += remaining;
+          remaining = 0.0;
+        } else {
+          // Then principal
+          if (remaining > 0) {
+            final payPrincipal = remaining >= principal ? principal : remaining;
+            principalPortion += payPrincipal;
+            principal -= payPrincipal;
+            remaining -= payPrincipal;
+          }
+        }
       }
 
       // Any leftover is extra interest (beyond accrued)
@@ -336,9 +356,7 @@ class _StatementSectionState extends State<_StatementSection> {
       _EventType repaymentType = _EventType.repayment;
       if (principalPortion > 0 && interestPortion == 0 && extraInterest == 0) {
         repaymentType = _EventType.principalOnly;
-      } else if (principalPortion == 0 &&
-          interestPortion > 0 &&
-          extraInterest == 0) {
+      } else if (principalPortion == 0 && (interestPortion > 0 || extraInterest > 0)) {
         repaymentType = _EventType.interestOnly;
       } else if (principalPortion > 0 && interestPortion > 0) {
         repaymentType = _EventType.mixedPayment;

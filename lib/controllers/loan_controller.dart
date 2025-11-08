@@ -6,7 +6,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:file_selector/file_selector.dart';
 import 'dart:io';
+import 'package:list/utils/nepali_date_utils.dart';
+import 'package:list/models/loan_event.dart';
 
 class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
@@ -21,6 +24,307 @@ class LoanController extends GetxController {
   void onInit() {
     super.onInit();
     loadLoans();
+  }
+
+  // Record a performed event (stored separately) for strict 'performed today' filtering
+  void _recordEvent({
+    required String name,
+    required String serial,
+    required String type,
+    required DateTime recordedDate,
+    required double amount,
+    required String jewelleryName,
+    double? dueAfter,
+    String? description,
+  }) {
+    try {
+      final box = Hive.box<LoanPerformedEvent>('events');
+      final event = LoanPerformedEvent(
+        name: name,
+        serialNumber: serial,
+        type: type,
+        amount: amount,
+        recordedDate: recordedDate,
+        jewelleryName: jewelleryName,
+        dueAfter: dueAfter,
+        description: description,
+      );
+      box.add(event);
+    } catch (e) {
+      // ignore event write failures
+    }
+  }
+
+  // Export today's transactions (loans + deposits) to PDF using performed events
+  Future<void> exportTodayReportToPDF() async {
+    try {
+      isLoading.value = true;
+
+      final permissionGranted = await _requestStoragePermissions();
+      if (!permissionGranted) {
+        _showSnackbar('Error', 'Storage permission is required to save PDF.');
+        return;
+      }
+
+      bool _sameDay(DateTime a, DateTime b) =>
+          a.year == b.year && a.month == b.month && a.day == b.day;
+
+      final today = DateTime.now();
+
+      // Read events and filter by performedAt = today
+      final eventsBox = Hive.box<LoanPerformedEvent>('events');
+      final allEvents = eventsBox.values.toList();
+      final todays = allEvents.where((e) => _sameDay(e.performedAt, today)).toList();
+
+      // Map events to simple rows with display fields
+      final rows = todays.map<Map<String, String>>((e) {
+        final nep = NepaliDate.fromGregorian(e.recordedDate).format();
+        String desc;
+        switch (e.type) {
+          case 'disbursement':
+            desc = e.description ?? 'Loan disbursed';
+            break;
+          case 'repayment':
+            desc = e.description ?? 'Payment received';
+            break;
+          case 'topup':
+            desc = e.description ?? 'Top-up added';
+            break;
+          case 'deposit':
+          case 'withdrawal':
+            desc = e.description ?? e.type;
+            break;
+          default:
+            desc = e.description ?? e.type;
+        }
+        return {
+          'name': e.name,
+          'serial': e.serialNumber.isEmpty ? '-' : e.serialNumber,
+          'jewellery': (e.jewelleryName.isEmpty ? '-' : e.jewelleryName),
+          'amount': e.amount.toStringAsFixed(0),
+          'dateNep': nep,
+          'due': e.dueAfter != null ? e.dueAfter!.toStringAsFixed(0) : '-',
+          'desc': desc,
+        };
+      }).toList();
+
+      // Compute counts for header
+      final loanCount = todays.where((e) => e.type == 'disbursement' || e.type == 'repayment' || e.type == 'topup').length;
+      final depositCount = todays.where((e) => e.type == 'deposit' || e.type == 'withdrawal').length;
+
+      final pdf = pw.Document();
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          build: (ctx) => [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Today\'s Transactions Report',
+                          style: pw.TextStyle(
+                            fontSize: 22,
+                            fontWeight: pw.FontWeight.bold,
+                          )),
+                      pw.Text(
+                        'Date: ${today.toString().substring(0, 10)}',
+                        style: const pw.TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  pw.Text(
+                    'Loans: $loanCount  |  Deposits: $depositCount',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+
+            pw.SizedBox(height: 12),
+            // Combined section (Loans + Deposits)
+            pw.Text('Today\'s Actions',
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 10),
+            if (rows.isEmpty)
+              pw.Text('No actions performed today.')
+            else
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  _todayHeaderRow(),
+                  pw.SizedBox(height: 6),
+                  ...rows.map(_todayDataRow).toList(),
+                ],
+              ),
+          ],
+        ),
+      );
+
+      // Generate PDF bytes
+      final pdfBytes = await pdf.save();
+      
+      // Get the file name with timestamp
+      final fileName = 'today_transactions_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      
+      // Ask user to select save location
+      try {
+        final String? outputPath = await getSavePath(
+          suggestedName: fileName,
+          acceptedTypeGroups: [
+            XTypeGroup(
+              label: 'PDF',
+              extensions: ['pdf'],
+              mimeTypes: ['application/pdf'],
+            ),
+          ],
+        );
+        
+        if (outputPath != null) {
+          final file = XFile.fromData(
+            pdfBytes,
+            mimeType: 'application/pdf',
+            name: fileName,
+          );
+          
+          // Save the file
+          await file.saveTo(outputPath);
+          
+          // Open the PDF file
+          await OpenFile.open(outputPath);
+          
+          _showSnackbar('Success', 'Today\'s report exported successfully');
+        } else {
+          _showSnackbar('Cancelled', 'Save operation was cancelled');
+        }
+      } catch (e) {
+        print('Error saving file: $e');
+        
+        // Fallback to default location if file picker fails
+        try {
+          Directory? output;
+          if (Platform.isAndroid) {
+            output = Directory('/storage/emulated/0/Download');
+            if (!await output.exists()) {
+              output = await getExternalStorageDirectory();
+              output ??= await getApplicationDocumentsDirectory();
+            }
+          } else {
+            output = await getApplicationDocumentsDirectory();
+          }
+          
+          final file = File('${output.path}/$fileName');
+          await file.writeAsBytes(pdfBytes);
+          await OpenFile.open(file.path);
+          
+          _showSnackbar('Success', 'Today\'s report saved to default location');
+        } catch (e) {
+          print('Error saving to default location: $e');
+          _showSnackbar('Error', 'Failed to save today\'s report: $e');
+        }
+      }
+    } catch (e) {
+      _showSnackbar('Error', 'Failed to export today\'s report');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Helpers to build header/data rows for today report
+  pw.Widget _todayHeaderRow() {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey200,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Row(children: [
+        pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Name', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Serial', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Jewellery', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Amount', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Due After', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text('Date (Nepali)', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)))),
+        pw.Expanded(
+            flex: 5,
+            child: pw.Text('Description', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+      ]),
+    );
+  }
+
+  pw.Widget _todayDataRow(Map<String, String> e) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const pw.EdgeInsets.only(top: 8),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        border: pw.Border.all(color: PdfColors.grey300),
+      ),
+      child: pw.Row(children: [
+        pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['name'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['serial'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['jewellery'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['amount'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['due'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 2,
+            child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 8),
+                child: pw.Text(e['dateNep'] ?? '-', style: const pw.TextStyle(fontSize: 10)))),
+        pw.Expanded(
+            flex: 5,
+            child: pw.Text(e['desc'] ?? '-', style: const pw.TextStyle(fontSize: 10))),
+      ]),
+    );
   }
 
   void loadLoans() {
@@ -65,6 +369,16 @@ class LoanController extends GetxController {
       loanBox.add(loan);
       loans.add(loan);
       filteredLoans.value = loans;
+      _recordEvent(
+        name: loan.name,
+        serial: loan.serialNumber,
+        type: 'disbursement',
+        recordedDate: loan.date,
+        amount: loan.amountGiven,
+        jewelleryName: loan.jewelleryName,
+        dueAfter: loan.dueAmount,
+        description: 'Loan disbursed',
+      );
 
       // Force UI refresh to update grouping
       refreshLoanCalculations();
@@ -73,9 +387,7 @@ class LoanController extends GetxController {
       printAllLoans();
 
       _showSnackbar('Success', 'Loan added successfully');
-
-      // Navigate back to loan home page
-      Get.offAllNamed('/home');
+      
     } catch (e) {
       print('Error adding loan: $e');
       _showSnackbar('Error', 'Failed to add loan');
@@ -148,7 +460,7 @@ class LoanController extends GetxController {
   }
 
   // New method to add partial repayment with validation
-  void addPartialRepayment(String serialNumber, double amount, DateTime date) {
+  void addPartialRepayment(String serialNumber, double amount, DateTime date, {bool interestOnly = false, bool principalOnly = false}) {
     try {
       final loanIndex = loans.indexWhere(
         (loan) => loan.serialNumber == serialNumber,
@@ -168,23 +480,62 @@ class LoanController extends GetxController {
       // Clamp future-dated repayments to today so the change reflects immediately in dueAmount
       final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
 
-      // Compute outstanding due as of the effective repayment date (no settlement enforcement)
-      final outstanding = loan.outstandingDueAt(effectiveDate, forSettlement: false);
+      double adjustedAmount = amount;
 
-      // Do not allow overpayment; prevent negative balances
-      if (amount - outstanding > 0.005) {
-        // small epsilon for floating point
-        _showSnackbar(
-          'Error',
-          'Repayment exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
-        );
-        return;
+      if (principalOnly) {
+        // Clamp to remaining principal at effective date
+        final remainingP = loan.remainingPrincipalAt(effectiveDate);
+        if (adjustedAmount - remainingP > 0.005) {
+          _showSnackbar(
+            'Error',
+            'Principal payment exceeds remaining principal (NPR ${remainingP.toStringAsFixed(2)})',
+          );
+          return;
+        }
+        if (adjustedAmount > remainingP) adjustedAmount = remainingP;
+      } else {
+        // Compute outstanding due as of the effective repayment date (no settlement enforcement)
+        final outstanding = loan.outstandingDueAt(effectiveDate, forSettlement: false);
+
+        // Do not allow overpayment; prevent negative balances
+        if (adjustedAmount - outstanding > 0.005) {
+          _showSnackbar(
+            'Error',
+            'Repayment exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
+          );
+          return;
+        }
+
+        // If amount is slightly more due to rounding, clamp to outstanding
+        if (adjustedAmount > outstanding) adjustedAmount = outstanding;
+
+        // For interest-only collections: clamp to accrued interest at effective date (no min-30)
+        if (interestOnly) {
+          final accruedAtDate = loan.accruedInterestAt(effectiveDate, forSettlement: false);
+          if (adjustedAmount > accruedAtDate) {
+            adjustedAmount = accruedAtDate;
+          }
+        }
       }
 
-      // If amount is slightly more due to rounding, clamp to outstanding
-      final adjustedAmount = amount > outstanding ? outstanding : amount;
-
-      loan.addPartialRepayment(adjustedAmount, effectiveDate);
+      loan.addPartialRepayment(
+        adjustedAmount,
+        effectiveDate,
+        interestOnly: interestOnly,
+        principalOnly: principalOnly,
+      );
+      _recordEvent(
+        name: loan.name,
+        serial: loan.serialNumber,
+        type: 'repayment',
+        recordedDate: effectiveDate,
+        amount: adjustedAmount,
+        jewelleryName: loan.jewelleryName,
+        dueAfter: loan.dueAmount,
+        description: interestOnly
+            ? 'Interest payment received'
+            : (principalOnly ? 'Principal payment received' : 'Payment received'),
+      );
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
@@ -261,6 +612,16 @@ class LoanController extends GetxController {
       // Clamp future-dated top-ups to today so the change reflects immediately in dueAmount
       final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
       loan.addTopUp(amount, effectiveDate);
+      _recordEvent(
+        name: loan.name,
+        serial: loan.serialNumber,
+        type: 'topup',
+        recordedDate: effectiveDate,
+        amount: amount,
+        jewelleryName: loan.jewelleryName,
+        dueAfter: loan.dueAmount,
+        description: 'Top-up added',
+      );
       loan.save();
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
@@ -688,6 +1049,24 @@ class LoanController extends GetxController {
     }
   }
 
+  double getTotalPrincipalDue() {
+    try {
+      return loans.fold(0.0, (sum, loan) => sum + loan.remainingPrincipalAt(DateTime.now()));
+    } catch (e) {
+      print('Error calculating total principal due: $e');
+      return 0.0;
+    }
+  }
+
+  double getTotalInterestDue() {
+    try {
+      return loans.fold(0.0, (sum, loan) => sum + (loan.dueAmount - loan.remainingPrincipalAt(DateTime.now())));
+    } catch (e) {
+      print('Error calculating total interest due: $e');
+      return 0.0;
+    }
+  }
+
   int getTotalLoansCount() {
     return loans.length;
   }
@@ -698,6 +1077,16 @@ class LoanController extends GetxController {
     } catch (e) {
       print('Error counting overdue loans: $e');
       return 0;
+    }
+  }
+
+  // Get list of all overdue loans
+  List<Loan> getOverdueLoans() {
+    try {
+      return loans.where((loan) => loan.isOverdue).toList();
+    } catch (e) {
+      print('Error getting overdue loans: $e');
+      return [];
     }
   }
 
@@ -1060,7 +1449,7 @@ class LoanController extends GetxController {
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(20),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 28),
           build: (pw.Context context) {
             return [
               // Header
@@ -1108,8 +1497,8 @@ class LoanController extends GetxController {
 
               // Summary Section
               pw.Container(
-                margin: const pw.EdgeInsets.only(top: 20, bottom: 20),
-                padding: const pw.EdgeInsets.all(15),
+                margin: const pw.EdgeInsets.only(top: 24, bottom: 24),
+                padding: const pw.EdgeInsets.all(16),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.grey100,
                   borderRadius: const pw.BorderRadius.all(
@@ -1121,42 +1510,39 @@ class LoanController extends GetxController {
                   children: [
                     pw.Text(
                       'Summary',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                     ),
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     pw.Row(
                       children: [
                         pw.Expanded(
                           child: _buildSummaryBox(
                             'Total Amount Given',
-                            'NPR ${getTotalLoansAmount().toStringAsFixed(2)}',
+                            getTotalLoansAmount().toStringAsFixed(0),
                             PdfColors.blue,
                           ),
                         ),
-                        pw.SizedBox(width: 10),
+                        pw.SizedBox(width: 12),
                         pw.Expanded(
                           child: _buildSummaryBox(
                             'Total Amount Received',
-                            'NPR ${getTotalReceivedAmount().toStringAsFixed(2)}',
+                            getTotalReceivedAmount().toStringAsFixed(0),
                             PdfColors.green,
                           ),
                         ),
                       ],
                     ),
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     pw.Row(
                       children: [
                         pw.Expanded(
                           child: _buildSummaryBox(
                             'Total Due Amount',
-                            'NPR ${getTotalDueAmount().toStringAsFixed(2)}',
+                            getTotalDueAmount().toStringAsFixed(0),
                             PdfColors.red,
                           ),
                         ),
-                        pw.SizedBox(width: 10),
+                        pw.SizedBox(width: 12),
                         pw.Expanded(
                           child: _buildSummaryBox(
                             'Overdue Loans',
@@ -1177,35 +1563,68 @@ class LoanController extends GetxController {
         ),
       );
 
-      // Save PDF to device
-      Directory? output;
+      // Generate PDF bytes
+      final pdfBytes = await pdf.save();
+      
+      // Get the file name with timestamp
+      final fileName = 'loan_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      
+      // Ask user to select save location
       try {
-        // Try to save to Downloads directory (doesn't require permissions on modern Android)
-        if (Platform.isAndroid) {
-          output = Directory('/storage/emulated/0/Download');
-          if (!await output.exists()) {
-            // Fallback to external storage directory
-            output = await getExternalStorageDirectory();
-            output ??= await getApplicationDocumentsDirectory();
-          }
+        final String? outputPath = await getSavePath(
+          suggestedName: fileName,
+          acceptedTypeGroups: [
+            XTypeGroup(
+              label: 'PDF',
+              extensions: ['pdf'],
+              mimeTypes: ['application/pdf'],
+            ),
+          ],
+        );
+        
+        if (outputPath != null) {
+          final file = XFile.fromData(
+            pdfBytes,
+            mimeType: 'application/pdf',
+            name: fileName,
+          );
+          
+          // Save the file
+          await file.saveTo(outputPath);
+          
+          // Open the PDF file
+          await OpenFile.open(outputPath);
+          
+          _showSnackbar('Success', 'PDF exported successfully');
         } else {
-          // For iOS and other platforms
-          output = await getApplicationDocumentsDirectory();
+          _showSnackbar('Cancelled', 'Save operation was cancelled');
         }
       } catch (e) {
-        print('Error getting storage directory: $e');
-        output = await getTemporaryDirectory();
+        print('Error saving file: $e');
+        
+        // Fallback to default location if file picker fails
+        try {
+          Directory? output;
+          if (Platform.isAndroid) {
+            output = Directory('/storage/emulated/0/Download');
+            if (!await output.exists()) {
+              output = await getExternalStorageDirectory();
+              output ??= await getApplicationDocumentsDirectory();
+            }
+          } else {
+            output = await getApplicationDocumentsDirectory();
+          }
+          
+          final file = File('${output.path}/$fileName');
+          await file.writeAsBytes(pdfBytes);
+          await OpenFile.open(file.path);
+          
+          _showSnackbar('Success', 'PDF saved to default location');
+        } catch (e) {
+          print('Error saving to default location: $e');
+          _showSnackbar('Error', 'Failed to save PDF: $e');
+        }
       }
-
-      final file = File(
-        '${output.path}/loan_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
-      );
-      await file.writeAsBytes(await pdf.save());
-
-      // Open the PDF file
-      await OpenFile.open(file.path);
-
-      _showSnackbar('Success', 'PDF exported successfully and opened');
     } catch (e) {
       print('Error exporting PDF: $e');
       _showSnackbar('Error', 'Failed to export PDF: $e');
@@ -1216,7 +1635,7 @@ class LoanController extends GetxController {
 
   pw.Widget _buildSummaryBox(String title, String value, PdfColor color) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
+      padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
         color: PdfColors.grey100,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
@@ -1229,11 +1648,11 @@ class LoanController extends GetxController {
             title,
             style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
           ),
-          pw.SizedBox(height: 5),
+          pw.SizedBox(height: 6),
           pw.Text(
             value,
             style: pw.TextStyle(
-              fontSize: 16,
+              fontSize: 17,
               fontWeight: pw.FontWeight.bold,
               color: color,
             ),
@@ -1253,8 +1672,8 @@ class LoanController extends GetxController {
 
       widgets.add(
         pw.Container(
-          margin: const pw.EdgeInsets.only(bottom: 20),
-          padding: const pw.EdgeInsets.all(15),
+          margin: const pw.EdgeInsets.only(bottom: 24),
+          padding: const pw.EdgeInsets.all(16),
           decoration: pw.BoxDecoration(
             color: isOverdue ? PdfColors.red50 : PdfColors.white,
             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
@@ -1328,19 +1747,23 @@ class LoanController extends GetxController {
                   pw.Expanded(
                     child: _buildCustomerSummaryItem(
                       'Total Given',
-                      'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountGiven).toStringAsFixed(2)}',
+                      customerLoans
+                          .fold(0.0, (sum, loan) => sum + loan.amountGiven)
+                          .toStringAsFixed(0),
                     ),
                   ),
                   pw.Expanded(
                     child: _buildCustomerSummaryItem(
                       'Total Received',
-                      'NPR ${customerLoans.fold(0.0, (sum, loan) => sum + loan.amountReceived).toStringAsFixed(2)}',
+                      customerLoans
+                          .fold(0.0, (sum, loan) => sum + loan.amountReceived)
+                          .toStringAsFixed(0),
                     ),
                   ),
                   pw.Expanded(
                     child: _buildCustomerSummaryItem(
                       'Total Due',
-                      'NPR ${totalDue.toStringAsFixed(2)}',
+                      totalDue.toStringAsFixed(0),
                     ),
                   ),
                 ],
@@ -1351,16 +1774,13 @@ class LoanController extends GetxController {
               // Individual Loans Table
               pw.Text(
                 'Individual Loans:',
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+                style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 10),
 
               // Table Header
               pw.Container(
-                padding: pw.EdgeInsets.all(8),
+                padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.grey200,
                   borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -1415,62 +1835,53 @@ class LoanController extends GetxController {
 
               // Table Rows
               ...customerLoans
+                  .asMap()
+                  .entries
                   .map(
-                    (loan) => pw.Container(
-                      margin: pw.EdgeInsets.only(top: 2),
-                      padding: pw.EdgeInsets.all(8),
-                      decoration: pw.BoxDecoration(
-                        color: loan.isOverdue
-                            ? PdfColors.red50
-                            : PdfColors.white,
-                        borderRadius: pw.BorderRadius.all(
-                          pw.Radius.circular(4),
+                    (entry) {
+                      final idx = entry.key;
+                      final loan = entry.value;
+                      final rowBg = loan.isOverdue
+                          ? PdfColors.red50
+                          : (idx % 2 == 0 ? PdfColors.white : PdfColors.grey100);
+                      return pw.Container(
+                        margin: pw.EdgeInsets.only(top: 6),
+                        padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: pw.BoxDecoration(
+                          color: rowBg,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                          border: pw.Border.all(color: PdfColors.grey300),
                         ),
-                        border: pw.Border.all(color: PdfColors.grey300),
-                      ),
-                      child: pw.Row(
-                        children: [
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(loan.serialNumber),
-                          ),
-                          pw.Expanded(
-                            flex: 3,
-                            child: pw.Text(loan.jewelleryName),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                        child: pw.Row(
+                          children: [
+                            pw.Expanded(flex: 2, child: pw.Text(loan.serialNumber)),
+                            pw.Expanded(flex: 3, child: pw.Text(loan.jewelleryName)),
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(loan.amountGiven.toStringAsFixed(0)),
                             ),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              'NPR ${loan.amountReceived.toStringAsFixed(2)}',
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(loan.amountReceived.toStringAsFixed(0)),
                             ),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              'NPR ${loan.dueAmount.toStringAsFixed(2)}',
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(loan.dueAmount.toStringAsFixed(0)),
                             ),
-                          ),
-                          pw.Expanded(
-                            flex: 2,
-                            child: pw.Text(
-                              loan.isOverdue ? 'Overdue' : 'Active',
-                              style: pw.TextStyle(
-                                color: loan.isOverdue
-                                    ? PdfColors.red
-                                    : PdfColors.green,
-                                fontWeight: pw.FontWeight.bold,
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(
+                                loan.isOverdue ? 'Overdue' : 'Active',
+                                style: pw.TextStyle(
+                                  color: loan.isOverdue ? PdfColors.red : PdfColors.green,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                          ],
+                        ),
+                      );
+                    },
                   )
                   .toList(),
 
@@ -1590,8 +2001,8 @@ class LoanController extends GetxController {
 
               // Customer Summary Section
               pw.Container(
-                margin: const pw.EdgeInsets.only(top: 20, bottom: 20),
-                padding: const pw.EdgeInsets.all(15),
+                margin: const pw.EdgeInsets.only(top: 24, bottom: 24),
+                padding: const pw.EdgeInsets.all(16),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.grey100,
                   borderRadius: const pw.BorderRadius.all(
@@ -1603,12 +2014,9 @@ class LoanController extends GetxController {
                   children: [
                     pw.Text(
                       'Customer Summary',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                     ),
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     pw.Row(
                       children: [
                         pw.Expanded(
@@ -1618,7 +2026,7 @@ class LoanController extends GetxController {
                             PdfColors.blue,
                           ),
                         ),
-                        pw.SizedBox(width: 10),
+                        pw.SizedBox(width: 12),
                         pw.Expanded(
                           child: _buildSummaryBox(
                             'Total Amount Received',
@@ -1628,7 +2036,7 @@ class LoanController extends GetxController {
                         ),
                       ],
                     ),
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     pw.Row(
                       children: [
                         pw.Expanded(

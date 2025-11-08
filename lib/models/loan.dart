@@ -91,6 +91,29 @@ class Loan extends HiveObject {
     );
   }
 
+  // Accrued interest at an arbitrary date using ledger; optionally enforce min-30 rule
+  double accruedInterestAt(DateTime asOf, {bool forSettlement = false}) {
+    final s = _ledgerUpTo(asOf);
+    double accrued = s['accrued'] ?? 0.0;
+    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+
+    if (forSettlement) {
+      final daysSinceStart = asOf.difference(date).inDays;
+      if (daysSinceStart < 30) {
+        final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+        final shortfall = minInterest - (interestPaid + accrued);
+        if (shortfall > 0) accrued += shortfall;
+      }
+    }
+    return accrued;
+  }
+
+  // Remaining principal at an arbitrary date using ledger
+  double remainingPrincipalAt(DateTime asOf) {
+    final s = _ledgerUpTo(asOf);
+    return s['principal'] ?? 0.0;
+  }
+
   // Calculate effective days for interest calculation based on current date
   // Applies minimum 30 days only when evaluating settlement as of now.
   // For display purposes, this returns max(daysPassed, 30).
@@ -151,23 +174,43 @@ class Loan extends HiveObject {
         principal += (-payment);
         payment = 0.0;
       } else if (payment > 0) {
-        // Apply payment to accrued interest first
-        final interestPortion = payment <= accrued ? payment : accrued;
-        accrued -= interestPortion;
-        interestPaid += interestPortion;
-        payment -= interestPortion;
-
-        // Then apply remaining payment to principal
-        if (payment > 0) {
+        // Principal-only marker: if daysSinceLoan == -2, skip paying accrued and reduce principal directly
+        if (repayment.daysSinceLoan == -2) {
           final principalPortion = payment >= principal ? principal : payment;
           principal -= principalPortion;
           payment -= principalPortion;
-        }
 
-        // If there's still leftover after clearing both, count it as extra interest paid
-        if (payment > 0) {
-          extraInterestPaid += payment;
-          payment = 0.0;
+          // Any leftover (shouldn't happen if clamped) is ignored for interest; treat as extra interest safeguard
+          if (payment > 0) {
+            extraInterestPaid += payment;
+            payment = 0.0;
+          }
+        } else {
+          // Apply payment to accrued interest first
+          final interestPortion = payment <= accrued ? payment : accrued;
+          accrued -= interestPortion;
+          interestPaid += interestPortion;
+          payment -= interestPortion;
+
+          // Interest-only marker: if daysSinceLoan == -1, do NOT reduce principal.
+          // Any remaining after paying accrued is treated as extra interest.
+          if (payment > 0 && repayment.daysSinceLoan == -1) {
+            extraInterestPaid += payment;
+            payment = 0.0;
+          } else {
+            // Then apply remaining payment to principal
+            if (payment > 0) {
+              final principalPortion = payment >= principal ? principal : payment;
+              principal -= principalPortion;
+              payment -= principalPortion;
+            }
+
+            // If there's still leftover after clearing both, count it as extra interest paid
+            if (payment > 0) {
+              extraInterestPaid += payment;
+              payment = 0.0;
+            }
+          }
         }
       }
 
@@ -205,6 +248,25 @@ class Loan extends HiveObject {
   // with enforcement of minimum 30 days only when treated as settlement now.
   double get currentCalculatedInterest {
     final asOf = DateTime.now();
+    // If no partial repayments/top-ups, apply capitalization-at-due-date rule
+    if (partialRepayments.isEmpty) {
+      final totalDays = asOf.difference(date).inDays;
+      final firstPhaseDays = totalDays <= duration ? totalDays : duration;
+      final overdueDays = totalDays > duration ? (totalDays - duration) : 0;
+
+      // Enforce minimum 30 days if settling before 30 days
+      final appliedFirstPhaseDays = (firstPhaseDays < 30) ? 30 : firstPhaseDays;
+
+      final i1 = (amountGiven * dailyInterestRate * appliedFirstPhaseDays) / 100;
+      if (overdueDays <= 0) {
+        return i1;
+      }
+      final principalAtDue = amountGiven + (amountGiven * dailyInterestRate * duration) / 100;
+      final i2 = (principalAtDue * dailyInterestRate * overdueDays) / 100;
+      return i1 + i2;
+    }
+
+    // Default: ledger-based
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
     final interestPaid =
@@ -253,9 +315,28 @@ class Loan extends HiveObject {
     return accrued;
   }
 
-  // Outstanding balance now (principal + interest up to now, enforcing min 30 days if < 30)
+  // Outstanding balance now (principal + interest up to now)
   double get dueAmount {
     final asOf = DateTime.now();
+    // If no partial repayments/top-ups, apply capitalization-at-due-date rule
+    if (partialRepayments.isEmpty) {
+      final totalDays = asOf.difference(date).inDays;
+      final firstPhaseDays = totalDays <= duration ? totalDays : duration;
+      final overdueDays = totalDays > duration ? (totalDays - duration) : 0;
+
+      // Enforce minimum 30 days if settling before 30 days
+      final appliedFirstPhaseDays = (firstPhaseDays < 30) ? 30 : firstPhaseDays;
+
+      final i1 = (amountGiven * dailyInterestRate * appliedFirstPhaseDays) / 100;
+      if (overdueDays <= 0) {
+        return amountGiven + i1;
+      }
+      final principalAtDue = amountGiven + (amountGiven * dailyInterestRate * duration) / 100;
+      final i2 = (principalAtDue * dailyInterestRate * overdueDays) / 100;
+      return amountGiven + i1 + i2;
+    }
+
+    // Default: ledger-based
     final s = _ledgerUpTo(asOf);
     double principal = s['principal'] ?? 0.0;
     double accrued = s['accrued'] ?? 0.0;
@@ -331,8 +412,11 @@ class Loan extends HiveObject {
   }
 
   // Method to add partial repayment
-  void addPartialRepayment(double amount, DateTime repaymentDate) {
-    final daysSinceLoan = repaymentDate.difference(date).inDays;
+  void addPartialRepayment(double amount, DateTime repaymentDate, {bool interestOnly = false, bool principalOnly = false}) {
+    final computedDays = repaymentDate.difference(date).inDays;
+    final daysSinceLoan = interestOnly
+        ? -1
+        : (principalOnly ? -2 : computedDays);
     partialRepayments.add(
       PartialRepayment(
         amount: amount,

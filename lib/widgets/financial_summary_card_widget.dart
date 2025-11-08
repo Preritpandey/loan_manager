@@ -30,8 +30,8 @@ class FinancialSummaryCard extends StatelessWidget {
             return Column(
               children: [
                 InfoRow(
-                  label: 'Principal Amount',
-                  value: 'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                  label: 'Current Principal',
+                  value: 'NPR ${loan.remainingPrincipal.toStringAsFixed(2)}',
                   color: Colors.blue[700],
                   icon: Icons.attach_money,
                   isAmount: true,

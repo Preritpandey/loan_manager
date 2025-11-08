@@ -138,14 +138,18 @@ class LoanDetailOperationsController extends GetxController {
   }
 
   Future<bool> deleteLoan() async {
+    if (isProcessingAction.value) return false;
+
+    isProcessingAction.value = true;
     try {
       _loanController.deleteLoanBySerial(_loan.serialNumber);
       _showSuccessSnackbar('Loan deleted successfully');
-
       return true;
     } catch (e) {
       _showErrorSnackbar('Failed to delete loan');
       return false;
+    } finally {
+      isProcessingAction.value = false;
     }
   }
 
@@ -164,9 +168,22 @@ class LoanDetailOperationsController extends GetxController {
         actions: [
           TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              deleteLoan();
+            onPressed: () async {
+              // Close the confirmation dialog
               Get.back();
+              // Show loading while deleting
+              Get.dialog(
+                const Center(child: CircularProgressIndicator()),
+                barrierDismissible: false,
+              );
+              final ok = await deleteLoan();
+              // Close loading dialog
+              if (Get.isDialogOpen == true) {
+                Get.back();
+              }
+              if (!ok) {
+                // If failed, remain on page; snackbar already shown
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red[700],
@@ -275,11 +292,12 @@ class LoanDetailOperationsController extends GetxController {
       // Apply the interest collection at the selected date
       // We still calculate the amount for the selected days, but record it at the chosen date
 
-      // Record interest-only repayment; ledger applies to interest first so principal stays intact
+      // Record interest-only repayment; ledger applies to interest and will not reduce principal
       _loanController.addPartialRepayment(
         _loan.serialNumber,
         interestAmount,
         repaymentDate,
+        interestOnly: true,
       );
 
       // Sync local reference with the updated loan from controller
@@ -337,7 +355,7 @@ class LoanDetailOperationsController extends GetxController {
     }
   }
 
-  Future<bool> addPrincipalOnlyPayment(double principalAmount) async {
+  Future<bool> addPrincipalOnlyPayment(double principalAmount, DateTime repaymentDate) async {
     if (isProcessingAction.value) return false;
 
     if (principalAmount <= 0) {
@@ -354,14 +372,15 @@ class LoanDetailOperationsController extends GetxController {
     isProcessingAction.value = true;
 
     try {
-      // Post at last event date so repayment goes straight to principal (no interim interest)
-      final start = _loan.lastEventDate;
+      // Use the selected collection date so interest up to that date remains due
+      final start = repaymentDate;
 
-      // Add partial repayment - the loan's ledger system will handle principal reduction
+      // Add principal-only repayment so it does not touch accrued interest
       _loanController.addPartialRepayment(
         _loan.serialNumber,
         principalAmount,
         start,
+        principalOnly: true,
       );
 
       // Sync local reference with the updated loan from controller
@@ -413,11 +432,12 @@ class LoanDetailOperationsController extends GetxController {
       // Use selected date for both principal and interest entries
       final start = repaymentDate;
 
-      // 1) Apply principal repayment at start
+      // 1) Apply principal repayment at start as principal-only
       _loanController.addPartialRepayment(
         _loan.serialNumber,
         principalAmount,
         start,
+        principalOnly: true,
       );
 
       // Refresh loan to get updated remaining principal
@@ -434,11 +454,12 @@ class LoanDetailOperationsController extends GetxController {
         final interestAmount =
             (principalBase * _loan.dailyInterestRate * days) / 100.0;
 
-        // 3) Collect that interest immediately so UI reflects payment now
+        // 3) Collect that interest immediately as interest-only so principal is not affected
         _loanController.addPartialRepayment(
           _loan.serialNumber,
           interestAmount,
           repaymentDate,
+          interestOnly: true,
         );
 
         // Reload
@@ -594,11 +615,12 @@ class LoanDetailOperationsController extends GetxController {
       // Record the interest payment immediately so UI reflects the change now
       final repaymentDate = DateTime.now();
 
-      // Add the interest payment for custom days
+      // Add the interest payment for custom days as interest-only
       _loanController.addPartialRepayment(
         _loan.serialNumber,
         interestAmount,
         repaymentDate,
+        interestOnly: true,
       );
 
       // Sync local reference with the updated loan from controller

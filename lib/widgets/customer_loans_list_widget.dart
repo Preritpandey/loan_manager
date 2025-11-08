@@ -207,8 +207,8 @@ class CustomerLoansListWidget extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _buildDetailItem(
-                          'Amount Given',
-                          'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                          'Current Principal',
+                          'NPR ${loan.remainingPrincipal.toStringAsFixed(2)}',
                           Colors.blue,
                           Icons.account_balance_wallet,
                         ),

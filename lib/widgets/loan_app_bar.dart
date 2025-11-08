@@ -61,8 +61,33 @@ class LoanAppBar extends StatelessWidget implements PreferredSizeWidget {
               color: Colors.white,
               size: 20,
             ),
-            onPressed:
-                onExportPDF ?? () => Get.find<LoanController>().exportToPDF(),
+            onPressed: () async {
+              final ctrl = Get.find<LoanController>();
+              await showMenu<String>(
+                context: context,
+                position: const RelativeRect.fromLTRB(1000, 80, 16, 0),
+                items: const [
+                  PopupMenuItem<String>(
+                    value: 'today',
+                    child: Text('Today'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'whole',
+                    child: Text('Whole loans report'),
+                  ),
+                ],
+              ).then((selection) async {
+                if (selection == 'today') {
+                  await ctrl.exportTodayReportToPDF();
+                } else if (selection == 'whole') {
+                  if (onExportPDF != null) {
+                    onExportPDF!();
+                  } else {
+                    await ctrl.exportToPDF();
+                  }
+                }
+              });
+            },
             tooltip: 'Export to PDF',
           ),
           const SizedBox(width: 8),

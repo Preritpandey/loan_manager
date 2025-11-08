@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
+import 'package:list/models/loan_event.dart';
 
 class DepositController extends GetxController {
   final Box<DepositModel> depositBox = Hive.box<DepositModel>('deposits');
@@ -99,6 +100,19 @@ class DepositController extends GetxController {
       model.transactions = List<DepositTransaction>.from(model.transactions)
         ..add(txn);
       model.save();
+      // Record performed event for strict 'performed today' logic
+      try {
+        final box = Hive.box<LoanPerformedEvent>('events');
+        final ev = LoanPerformedEvent(
+          name: model.name,
+          serialNumber: '',
+          type: type.toLowerCase() == 'withdrawal' ? 'withdrawal' : 'deposit',
+          amount: amount,
+          recordedDate: txn.dateAD ?? DateTime.now(),
+          description: description ?? type,
+        );
+        box.add(ev);
+      } catch (_) {}
       deposits[idx] = model; // trigger update
       filtered.value = deposits;
       _snack('Success', '$type recorded');

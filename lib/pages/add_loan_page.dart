@@ -259,12 +259,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
                           Expanded(
                             flex: isDesktop ? 1 : 1,
                             child: ElevatedButton.icon(
-                              onPressed: () async {
-                                final success = await controller.submitForm();
-                                if (success) {
-                                  controller.safeNavigateBack();
-                                }
-                              },
+                              onPressed: () => controller.submitForm(),
                               icon: const Icon(Icons.add_circle_outline),
                               label: const Text('Add Loan'),
                               style: ElevatedButton.styleFrom(

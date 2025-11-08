@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/utils/nepali_date_utils.dart';
+import 'package:list/pages/loan_detail_page.dart';
 
 class AddLoanFormController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
@@ -163,6 +164,8 @@ class AddLoanFormController extends GetxController {
       _loanController.addLoan(loan);
       success = true; // Set success to true after successful loan addition
 
+      // Navigate to the loan detail page of the newly created loan
+      Get.off(() => LoanDetailPage(loan: loan));
       // Show success message
       _showSuccessSnackbar('Loan added successfully!');
     } catch (e, stack) {

@@ -45,7 +45,7 @@ class LoanStatusHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'NPR ${loan.amountGiven.toStringAsFixed(2)}',
+                      'NPR ${loan.remainingPrincipal.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: isMobile ? 22 : 28,
@@ -53,7 +53,7 @@ class LoanStatusHeader extends StatelessWidget {
                       ),
                     ),
                     const Text(
-                      'Principal Amount',
+                      'Current Principal',
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                   ],

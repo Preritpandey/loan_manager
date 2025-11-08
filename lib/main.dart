@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/models/deposit.dart';
+import 'package:list/models/loan_event.dart';
 import 'app.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -16,6 +17,9 @@ void main() async {
   Hive.registerAdapter(DepositModelAdapter());
   Hive.registerAdapter(DepositTransactionAdapter());
   await Hive.openBox<DepositModel>('deposits');
+  // Register and open events box
+  Hive.registerAdapter(LoanPerformedEventAdapter());
+  await Hive.openBox<LoanPerformedEvent>('events');
 
   // Request storage permission on app startup
   await Permission.storage.request();

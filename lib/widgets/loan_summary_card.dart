@@ -7,6 +7,9 @@ class LoanSummaryCard extends StatelessWidget {
   final double totalDue;
   final int overdueLoans;
   final double totalReceived;
+  final double totalPrincipalDue;
+  final double totalInterestDue;
+  final VoidCallback? onOverdueTap;
 
   const LoanSummaryCard({
     super.key,
@@ -16,6 +19,9 @@ class LoanSummaryCard extends StatelessWidget {
     required this.totalDue,
     required this.overdueLoans,
     required this.totalReceived,
+    required this.totalPrincipalDue,
+    required this.totalInterestDue,
+    this.onOverdueTap,
   });
 
   @override
@@ -76,11 +82,66 @@ class LoanSummaryCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _SummaryItem(
-                      title: 'Total Due',
-                      value: 'NPR ${totalDue.toStringAsFixed(0)}',
-                      icon: Icons.account_balance,
-                      color: Colors.red,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header with icon and title
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.account_balance,
+                                color: Colors.red,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Total Due',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          // Total amount
+                          Text(
+                            'NPR ${totalDue.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          // Divider line
+                          Container(
+                            height: 1,
+                            color: Colors.red.withOpacity(0.2),
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          // Breakdown
+                          _buildDetailRow(
+                            'Principal Due',
+                            totalPrincipalDue,
+                            Colors.grey[800]!,
+                          ),
+                          const SizedBox(height: 2),
+                          _buildDetailRow(
+                            'Interest Due',
+                            totalInterestDue,
+                            Colors.orange[700]!,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -89,11 +150,15 @@ class LoanSummaryCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: _SummaryItem(
-                      title: 'Overdue',
-                      value: '$overdueLoans',
-                      icon: Icons.warning,
-                      color: Colors.orange,
+                    child: GestureDetector(
+                      onTap: onOverdueTap,
+                      child: _SummaryItem(
+                        title: 'Overdue',
+                        value: '$overdueLoans',
+                        icon: Icons.warning,
+                        color: Colors.orange,
+                        isClickable: onOverdueTap != null,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -113,6 +178,27 @@ class LoanSummaryCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildDetailRow(String label, double amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[700])),
+          Text(
+            'NPR ${amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+              fontFeatures: [const FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SummaryItem extends StatelessWidget {
@@ -120,12 +206,14 @@ class _SummaryItem extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final bool isClickable;
 
   const _SummaryItem({
     required this.title,
     required this.value,
     required this.icon,
     required this.color,
+    this.isClickable = false,
   });
 
   @override
@@ -136,6 +224,15 @@ class _SummaryItem extends StatelessWidget {
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withOpacity(0.3)),
+        boxShadow: isClickable
+            ? [
+                BoxShadow(
+                  color: color.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
