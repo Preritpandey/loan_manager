@@ -564,9 +564,15 @@ class LoanDetailOperationsController extends GetxController {
       _showErrorSnackbar('Payment amount must be positive');
       return false;
     }
-    // Prevent overpayment beyond settlement outstanding due now (min-30 enforced)
-    // Validate against outstanding due as of the selected date (settlement rules)
-    final outstanding = _loan.outstandingDueAt(paymentDate, forSettlement: true);
+    
+    // For overdue loans, use forSettlement: false to allow collection of full overdue amount
+    // For non-overdue loans, use forSettlement: true to enforce 30-day minimum interest
+    final isOverdue = _loan.isOverdue;
+    final outstanding = _loan.outstandingDueAt(
+      paymentDate, 
+      forSettlement: !isOverdue, // false for overdue loans, true for non-overdue
+    );
+    
     if (amount - outstanding > 0.005) {
       _showErrorSnackbar(
         'Amount exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',

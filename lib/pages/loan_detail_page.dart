@@ -88,8 +88,9 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
                 // Add to Bank Button - Wrapped in Obx and referencing Rx to react to changes
                 Obx(() {
                   // Access RxList bankLoans to ensure Obx has an observable dependency
-                  final isInBank = bankLoanController.bankLoans
-                      .any((b) => b.loanId == widget.loan.loanId);
+                  final isInBank = bankLoanController.bankLoans.any(
+                    (b) => b.loanId == widget.loan.loanId,
+                  );
                   return Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
@@ -176,7 +177,6 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
               const SizedBox(height: 8),
               LoanStatementTiles(loan: loan),
               const SizedBox(height: 8),
-              CustomerSummaryCard(loan: loan),
               const SizedBox(height: 8),
               PaymentOptionsCard(loan: loan),
               DeleteLoanCard(

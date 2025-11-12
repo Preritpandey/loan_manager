@@ -356,7 +356,8 @@ class _StatementSectionState extends State<_StatementSection> {
       _EventType repaymentType = _EventType.repayment;
       if (principalPortion > 0 && interestPortion == 0 && extraInterest == 0) {
         repaymentType = _EventType.principalOnly;
-      } else if (principalPortion == 0 && (interestPortion > 0 || extraInterest > 0)) {
+      } else if (principalPortion == 0 &&
+          (interestPortion > 0 || extraInterest > 0)) {
         repaymentType = _EventType.interestOnly;
       } else if (principalPortion > 0 && interestPortion > 0) {
         repaymentType = _EventType.mixedPayment;
@@ -422,7 +423,7 @@ class _StatementRow extends StatelessWidget {
       case _EventType.mixedPayment:
         stripeColor = Colors.purple.shade400;
         icon = Icons.payments;
-        title = 'Mixed Payment';
+        title = 'Overall Payment';
         break;
       case _EventType.topUp:
         stripeColor = Colors.teal.shade400;

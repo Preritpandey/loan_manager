@@ -509,11 +509,14 @@ class LoanController extends GetxController {
         // If amount is slightly more due to rounding, clamp to outstanding
         if (adjustedAmount > outstanding) adjustedAmount = outstanding;
 
-        // For interest-only collections: clamp to accrued interest at effective date (no min-30)
+        // For interest-only collections: clamp to interest component at effective date
+        // Interest component honors overdue compounding: interest = outstanding - remaining principal
         if (interestOnly) {
-          final accruedAtDate = loan.accruedInterestAt(effectiveDate, forSettlement: false);
-          if (adjustedAmount > accruedAtDate) {
-            adjustedAmount = accruedAtDate;
+          final dueAt = loan.outstandingDueAt(effectiveDate, forSettlement: false);
+          final rpAt = loan.remainingPrincipalAt(effectiveDate);
+          final interestAtDate = (dueAt - rpAt).clamp(0.0, double.infinity);
+          if (adjustedAmount > interestAtDate) {
+            adjustedAmount = interestAtDate;
           }
         }
       }
@@ -570,8 +573,12 @@ class LoanController extends GetxController {
       // Clamp future-dated repayments to today so the change reflects immediately in dueAmount
       final effectiveDate = date.isAfter(DateTime.now()) ? DateTime.now() : date;
 
-      // Settlement due allows min-30 enforcement
-      final outstanding = loan.outstandingDueAt(effectiveDate, forSettlement: true);
+      // For overdue loans, don't enforce the 30-day minimum interest rule
+      final isOverdue = loan.isOverdue;
+      final outstanding = loan.outstandingDueAt(
+        effectiveDate, 
+        forSettlement: !isOverdue, // false for overdue loans, true for non-overdue
+      );
 
       // Do not allow overpayment; prevent negative balances
       if (amount - outstanding > 0.005) {
@@ -1024,7 +1031,8 @@ class LoanController extends GetxController {
   // Get total statistics
   double getTotalLoansAmount() {
     try {
-      return loans.fold(0.0, (sum, loan) => sum + loan.amountGiven);
+      // Use remainingPrincipal instead of amountGiven to account for principal repayments
+      return loans.fold(0.0, (sum, loan) => sum + loan.remainingPrincipal);
     } catch (e) {
       print('Error calculating total loans amount: $e');
       return 0.0;

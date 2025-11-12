@@ -83,6 +83,11 @@ class BankLoanController extends GetxController {
     return _bankLoansBox.containsKey(loanId);
   }
 
+  /// Calculates the total amount of all deposited bank loans
+  double get totalDepositedAmount {
+    return bankLoans.fold(0.0, (sum, bankLoan) => sum + (bankLoan.originalLoan.amountGiven));
+  }
+
   @override
   void onClose() {
     _bankLoansBox.close();

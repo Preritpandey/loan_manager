@@ -20,9 +20,15 @@ class CustomerTile extends StatelessWidget {
     final isOverdue = controller.isCustomerOverdue(customerName);
 
     // Aggregates for this customer
-    final totalGiven =
-        customerLoans.fold(0.0, (sum, loan) => sum + loan.amountGiven);
-    final totalDue = customerLoans.fold(0.0, (sum, loan) => sum + loan.dueAmount);
+    // Use remainingPrincipal instead of amountGiven to reflect the actual outstanding principal
+    final totalGiven = customerLoans.fold(
+      0.0,
+      (sum, loan) => sum + loan.remainingPrincipal,
+    );
+    final totalDue = customerLoans.fold(
+      0.0,
+      (sum, loan) => sum + loan.dueAmount,
+    );
 
     // Theme color (requested red)
     final themeRed = const Color.fromARGB(255, 204, 21, 27);
@@ -48,7 +54,10 @@ class CustomerTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             gradient: LinearGradient(
-              colors: [baseColor.withOpacity(0.03), baseColor.withOpacity(0.08)],
+              colors: [
+                baseColor.withOpacity(0.03),
+                baseColor.withOpacity(0.08),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),

@@ -68,57 +68,6 @@ class FinancialSummaryCard extends StatelessWidget {
           },
         ),
         const SizedBox(height: 8),
-        // Container(
-        //   padding: const EdgeInsets.all(12),
-        //   decoration: BoxDecoration(
-        //     color: Colors.blue[50],
-        //     borderRadius: BorderRadius.circular(8),
-        //     border: Border.all(color: Colors.blue[200]!),
-        //   ),
-        //   child: Column(
-        //     crossAxisAlignment: CrossAxisAlignment.start,
-        //     children: [
-        //       Text(
-        //         'Interest Calculation:',
-        //         style: TextStyle(
-        //           fontWeight: FontWeight.bold,
-        //           color: Colors.blue[700],
-        //           fontSize: 12,
-        //         ),
-        //       ),
-        //       const SizedBox(height: 4),
-        //       Text(
-        //         'Principal: NPR ${loan.amountGiven.toStringAsFixed(2)}',
-        //         style: const TextStyle(fontSize: 11),
-        //       ),
-        //       Text(
-        //         'Daily Rate: ${loan.dailyInterestRate.toStringAsFixed(4)}% (${loan.interestRate}% / 365)',
-        //         style: const TextStyle(fontSize: 11),
-        //       ),
-        //       GetBuilder<LoanDetailOperationsController>(
-        //         builder: (ops) {
-        //           final overrideActive = ops.isDurationOverrideActive;
-        //           final days = overrideActive
-        //               ? (ops.overrideDays ?? 0)
-        //               : (loan.daysPassed < 30 ? 30 : loan.daysPassed);
-        //           return Column(
-        //             crossAxisAlignment: CrossAxisAlignment.start,
-        //             children: [
-        //               Text('Days: $days', style: const TextStyle(fontSize: 11)),
-        //               Text(
-        //                 'Interest = (${loan.amountGiven.toStringAsFixed(2)} × ${loan.dailyInterestRate.toStringAsFixed(4)}% × $days) / 100',
-        //                 style: const TextStyle(
-        //                   fontSize: 11,
-        //                   fontStyle: FontStyle.italic,
-        //                 ),
-        //               ),
-        //             ],
-        //           );
-        //         },
-        //       ),
-        //     ],
-        //   ),
-        // ),
 
         // Real-time due (as of today) is intentionally omitted to prevent confusion.
         if (loan.isOverdue) ...[

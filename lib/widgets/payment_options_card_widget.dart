@@ -5,7 +5,7 @@ import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/controllers/loan_detail_operations_controller.dart';
 import 'package:list/utils/nepali_date_utils.dart';
-import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
+import 'package:nepali_utils/nepali_utils.dart';
 
 class PaymentOptionsCard extends StatefulWidget {
   final Loan loan;
@@ -46,26 +46,39 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   void initState() {
     super.initState();
     _updateCalculations();
+    // Initialize the payment amount with the total due
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _overallPaymentAmount = _controller.loan.dueAmount;
+        });
+      }
+    });
   }
 
   Future<void> _pickInterestNepaliDate() async {
-    final initial = picker.NepaliDateTime(
+    final initial = NepaliDateTime(
       _interestNepaliDate.year,
       _interestNepaliDate.month,
       _interestNepaliDate.day,
     );
-    final selected = await picker.showMaterialDatePicker(
+    
+    // Show date picker using showDatePicker with Nepali localization
+    final selected = await showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: picker.NepaliDateTime(2000, 1, 1),
-      lastDate: picker.NepaliDateTime(2200, 12, 30),
+      initialDate: initial.toDateTime(),
+      firstDate: NepaliDateTime(2000, 1, 1).toDateTime(),
+      lastDate: NepaliDateTime(2200, 12, 30).toDateTime(),
+      locale: const Locale('ne', 'NP'),
     );
+    
     if (selected != null) {
+      final nepaliDate = selected.toNepaliDateTime();
       setState(() {
         _interestNepaliDate = NepaliDate(
-          year: selected.year,
-          month: selected.month,
-          day: selected.day,
+          year: nepaliDate.year,
+          month: nepaliDate.month,
+          day: nepaliDate.day,
         );
         // Update days and interest
         final loanStartBs = widget.loan.nepaliDate;
@@ -97,19 +110,28 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
       final loanStartBs = widget.loan.nepaliDate;
       _selectedInterestDays = NepaliDate.daysBetween(loanStartBs, _interestNepaliDate);
       if (_selectedInterestDays < 0) _selectedInterestDays = 0;
+      
+      // Update remaining principal and calculated interest
+      _remainingPrincipal = widget.loan.remainingPrincipal;
+      _calculatedInterest = widget.loan.currentCalculatedInterest;
+      
       // Compute as-of date in AD for ledger-based calculations
       final asOf = _interestNepaliDate.toGregorian();
-      // Interest to collect = accrued interest at asOf without min-30 enforcement
-      _calculatedInterest = widget.loan.accruedInterestAt(asOf, forSettlement: false);
+      // Interest to collect should honor overdue compounding: interest = outstanding - remaining principal
+      final dueAt = widget.loan.outstandingDueAt(asOf, forSettlement: false);
+      final rpAt = widget.loan.remainingPrincipalAt(asOf);
+      _calculatedInterest = (dueAt - rpAt).clamp(0.0, double.infinity);
       // Show remaining principal as of the same date
-      _remainingPrincipal = widget.loan.remainingPrincipalAt(asOf);
+      _remainingPrincipal = rpAt;
     });
   }
 
   double _calculateInterestForDays(int days) {
     // Deprecated in favor of ledger-based computation at selected date
     final asOf = _interestNepaliDate.toGregorian();
-    return widget.loan.accruedInterestAt(asOf, forSettlement: false);
+    final dueAt = widget.loan.outstandingDueAt(asOf, forSettlement: false);
+    final rpAt = widget.loan.remainingPrincipalAt(asOf);
+    return (dueAt - rpAt).clamp(0.0, double.infinity);
   }
 
   void _showConfirmationDialog(String type, double amount, {int days = 0}) {
@@ -472,6 +494,14 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   }
 
   Widget _buildOverallPaymentSection() {
+    // Use the same due amount calculation as in the financial summary
+    final totalDue = _controller.loan.dueAmount;
+    
+    // Initialize the payment amount with the total due if it's not set
+    if (_overallPaymentAmount == 0.0 && totalDue > 0) {
+      _overallPaymentAmount = totalDue;
+    }
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -503,16 +533,29 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
           ),
           const SizedBox(height: 12),
           TextField(
+            controller: TextEditingController(
+              text: _overallPaymentAmount > 0 ? _overallPaymentAmount.toStringAsFixed(2) : '0.00',
+            ),
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
             ],
             decoration: InputDecoration(
               labelText: 'Payment Amount (NPR)',
+              hintText: 'Total due: NPR ${totalDue.toStringAsFixed(2)}',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
               prefixIcon: Icon(Icons.attach_money, color: Colors.blue[700]),
+              suffixIcon: IconButton(
+                icon: Icon(Icons.attach_money, color: Colors.blue[700]),
+                onPressed: () {
+                  setState(() {
+                    _overallPaymentAmount = totalDue;
+                  });
+                },
+                tooltip: 'Use total due amount',
+              ),
               filled: true,
               fillColor: Colors.white,
             ),
@@ -520,6 +563,14 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
               setState(() {
                 _overallPaymentAmount = double.tryParse(v) ?? 0.0;
               });
+            },
+            onTap: () {
+              // Auto-fill with total due when field is tapped
+              if (_overallPaymentAmount == 0.0 && totalDue > 0) {
+                setState(() {
+                  _overallPaymentAmount = totalDue;
+                });
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -789,23 +840,28 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   }
 
   Future<void> _pickNepaliDate() async {
-    final initial = picker.NepaliDateTime(
+    final initial = NepaliDateTime(
       _selectedNepaliDate.year,
       _selectedNepaliDate.month,
       _selectedNepaliDate.day,
     );
-    final selected = await picker.showMaterialDatePicker(
+    
+    // Show date picker using showDatePicker with Nepali localization
+    final selected = await showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: picker.NepaliDateTime(2000, 1, 1),
-      lastDate: picker.NepaliDateTime(2200, 12, 30),
+      initialDate: initial.toDateTime(),
+      firstDate: NepaliDateTime(2000, 1, 1).toDateTime(),
+      lastDate: NepaliDateTime(2200, 12, 30).toDateTime(),
+      locale: const Locale('ne', 'NP'),
     );
+    
     if (selected != null) {
+      final nepaliDate = selected.toNepaliDateTime();
       setState(() {
         _selectedNepaliDate = NepaliDate(
-          year: selected.year,
-          month: selected.month,
-          day: selected.day,
+          year: nepaliDate.year,
+          month: nepaliDate.month,
+          day: nepaliDate.day,
         );
       });
     }
