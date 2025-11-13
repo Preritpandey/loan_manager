@@ -439,6 +439,12 @@ class Loan extends HiveObject {
       
       // If the payment covers the total outstanding, ensure principal is fully paid
       if (amount >= totalOutstanding) {
+        // Check if loan was overdue before processing payment
+        final wasOverdue = repaymentDate.difference(date).inDays > duration;
+        
+        // Calculate total interest BEFORE adding payment (since ledger will change after)
+        final totalInterest = totalOutstanding - currentPrincipal;
+      
         // First, add a payment for the accrued interest
         if (currentAccrued > 0) {
           partialRepayments.add(
@@ -462,6 +468,12 @@ class Loan extends HiveObject {
         }
         
         amountReceived += amount;
+        
+        // If loan was overdue and payment covers total interest or total due, clear overdue status
+        if (wasOverdue && (amount >= totalInterest || amount >= totalOutstanding)) {
+          extendDurationToClearOverdue(repaymentDate);
+        }
+        
         if (isInBox) save();
         return;
       }
@@ -480,6 +492,19 @@ class Loan extends HiveObject {
       ),
     );
     amountReceived += amount;
+    
+    // Check if payment clears overdue status
+    // If loan was overdue and payment >= total interest OR payment >= total due, extend duration
+    final wasOverdue = repaymentDate.difference(date).inDays > duration;
+    if (wasOverdue) {
+      final totalInterest = getTotalInterestAt(repaymentDate);
+      final totalDue = outstandingDueAt(repaymentDate, forSettlement: false);
+      
+      // If payment covers full interest or full due amount, clear overdue status
+      if (amount >= totalInterest || amount >= totalDue) {
+        extendDurationToClearOverdue(repaymentDate);
+      }
+    }
     
     // Only save if the object is in a box (to avoid test errors)
     if (isInBox) {
@@ -576,6 +601,24 @@ class Loan extends HiveObject {
     final events = List<PartialRepayment>.from(partialRepayments)
       ..sort((a, b) => a.date.compareTo(b.date));
     return events.last.date;
+  }
+
+  // Calculate total interest amount (including overdue interest) at a given date
+  double getTotalInterestAt(DateTime asOf) {
+    final outstanding = outstandingDueAt(asOf, forSettlement: false);
+    final principal = remainingPrincipalAt(asOf);
+    return outstanding - principal;
+  }
+
+  // Extend loan duration to clear overdue status
+  // This sets the duration so that the loan is no longer overdue as of the given date
+  void extendDurationToClearOverdue(DateTime asOf) {
+    final daysPassed = asOf.difference(date).inDays;
+    if (daysPassed > duration) {
+      // Extend duration to the payment date to clear overdue status
+      duration = daysPassed;
+      if (isInBox) save();
+    }
   }
 
   // Get Nepali date

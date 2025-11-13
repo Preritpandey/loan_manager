@@ -5,7 +5,7 @@ import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/controllers/loan_detail_operations_controller.dart';
 import 'package:list/utils/nepali_date_utils.dart';
-import 'package:nepali_utils/nepali_utils.dart';
+import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 class PaymentOptionsCard extends StatefulWidget {
   final Loan loan;
@@ -22,7 +22,8 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
 
   // Controllers for different payment types
   final TextEditingController _interestOnlyController = TextEditingController();
-  final TextEditingController _principalOnlyController = TextEditingController();
+  final TextEditingController _principalOnlyController =
+      TextEditingController();
   final TextEditingController _principalDaysController = TextEditingController(
     text: '0',
   );
@@ -38,13 +39,18 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   int _confirmationDays = 0;
 
   // Selected collection date (BS)
-  NepaliDate _selectedNepaliDate = NepaliDate.today();
+  late NepaliDate _selectedNepaliDate;
   // Interest-only: selected Nepali date to compute days between loan issued date and this date
-  NepaliDate _interestNepaliDate = NepaliDate.today();
+  late NepaliDate _interestNepaliDate;
 
   @override
   void initState() {
     super.initState();
+    // Initialize with today's Nepali date
+    final today = NepaliDate.today();
+    _selectedNepaliDate = today;
+    _interestNepaliDate = today;
+
     _updateCalculations();
     // Initialize the payment amount with the total due
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,38 +62,55 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     });
   }
 
-  Future<void> _pickInterestNepaliDate() async {
-    final initial = NepaliDateTime(
-      _interestNepaliDate.year,
-      _interestNepaliDate.month,
-      _interestNepaliDate.day,
+  Future<void> _showNepaliDatePicker(
+    NepaliDate initialDate, {
+    required Function(NepaliDate) onDateSelected,
+  }) async {
+    // Convert NepaliDate to NepaliDateTime for the picker
+    // Use the date exactly as provided - no adjustments
+    final initialNepaliDateTime = picker.NepaliDateTime(
+      initialDate.year,
+      initialDate.month,
+      initialDate.day,
     );
-    
-    // Show date picker using showDatePicker with Nepali localization
-    final selected = await showDatePicker(
+
+    final selectedDate = await picker.showMaterialDatePicker(
       context: context,
-      initialDate: initial.toDateTime(),
-      firstDate: NepaliDateTime(2000, 1, 1).toDateTime(),
-      lastDate: NepaliDateTime(2200, 12, 30).toDateTime(),
-      locale: const Locale('ne', 'NP'),
+      initialDate: initialNepaliDateTime,
+      firstDate: picker.NepaliDateTime(2000, 1, 1),
+      lastDate: picker.NepaliDateTime(2200, 12, 30),
+      helpText: 'Select Nepali Date (BS)',
     );
-    
-    if (selected != null) {
-      final nepaliDate = selected.toNepaliDateTime();
-      setState(() {
-        _interestNepaliDate = NepaliDate(
-          year: nepaliDate.year,
-          month: nepaliDate.month,
-          day: nepaliDate.day,
-        );
-        // Update days and interest
-        final loanStartBs = widget.loan.nepaliDate;
-        _selectedInterestDays =
-            NepaliDate.daysBetween(loanStartBs, _interestNepaliDate);
-        if (_selectedInterestDays < 0) _selectedInterestDays = 0;
-        _calculatedInterest = _calculateInterestForDays(_selectedInterestDays);
-      });
+
+    if (selectedDate != null) {
+      final rawDate = NepaliDate(
+        year: selectedDate.year,
+        month: selectedDate.month,
+        day: selectedDate.day,
+      );
+      onDateSelected(rawDate);
     }
+  }
+
+  Future<void> _pickInterestNepaliDate() async {
+    await _showNepaliDatePicker(
+      _interestNepaliDate,
+      onDateSelected: (date) {
+        setState(() {
+          _interestNepaliDate = date;
+          // Update days and interest
+          final loanStartBs = widget.loan.nepaliDate;
+          _selectedInterestDays = NepaliDate.daysBetween(
+            loanStartBs,
+            _interestNepaliDate,
+          );
+          if (_selectedInterestDays < 0) _selectedInterestDays = 0;
+          _calculatedInterest = _calculateInterestForDays(
+            _selectedInterestDays,
+          );
+        });
+      },
+    );
   }
 
   @override
@@ -108,13 +131,16 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     setState(() {
       // Recompute selected days for interest-only using Nepali date diff
       final loanStartBs = widget.loan.nepaliDate;
-      _selectedInterestDays = NepaliDate.daysBetween(loanStartBs, _interestNepaliDate);
+      _selectedInterestDays = NepaliDate.daysBetween(
+        loanStartBs,
+        _interestNepaliDate,
+      );
       if (_selectedInterestDays < 0) _selectedInterestDays = 0;
-      
+
       // Update remaining principal and calculated interest
       _remainingPrincipal = widget.loan.remainingPrincipal;
       _calculatedInterest = widget.loan.currentCalculatedInterest;
-      
+
       // Compute as-of date in AD for ledger-based calculations
       final asOf = _interestNepaliDate.toGregorian();
       // Interest to collect should honor overdue compounding: interest = outstanding - remaining principal
@@ -144,6 +170,9 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
         // Sync collection date with the interest calculation date
         _selectedNepaliDate = _interestNepaliDate;
       }
+      // For other payment types, keep the existing _selectedNepaliDate
+      // (which is either the initial today's date or a user-selected date)
+      // Don't reset it here to preserve user's manual date selection
     });
   }
 
@@ -496,12 +525,12 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   Widget _buildOverallPaymentSection() {
     // Use the same due amount calculation as in the financial summary
     final totalDue = _controller.loan.dueAmount;
-    
+
     // Initialize the payment amount with the total due if it's not set
     if (_overallPaymentAmount == 0.0 && totalDue > 0) {
       _overallPaymentAmount = totalDue;
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -534,7 +563,9 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
           const SizedBox(height: 12),
           TextField(
             controller: TextEditingController(
-              text: _overallPaymentAmount > 0 ? _overallPaymentAmount.toStringAsFixed(2) : '0.00',
+              text: _overallPaymentAmount > 0
+                  ? _overallPaymentAmount.toStringAsFixed(2)
+                  : '0.00',
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [
@@ -840,31 +871,14 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
   }
 
   Future<void> _pickNepaliDate() async {
-    final initial = NepaliDateTime(
-      _selectedNepaliDate.year,
-      _selectedNepaliDate.month,
-      _selectedNepaliDate.day,
+    await _showNepaliDatePicker(
+      _selectedNepaliDate,
+      onDateSelected: (date) {
+        setState(() {
+          _selectedNepaliDate = date;
+        });
+      },
     );
-    
-    // Show date picker using showDatePicker with Nepali localization
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: initial.toDateTime(),
-      firstDate: NepaliDateTime(2000, 1, 1).toDateTime(),
-      lastDate: NepaliDateTime(2200, 12, 30).toDateTime(),
-      locale: const Locale('ne', 'NP'),
-    );
-    
-    if (selected != null) {
-      final nepaliDate = selected.toNepaliDateTime();
-      setState(() {
-        _selectedNepaliDate = NepaliDate(
-          year: nepaliDate.year,
-          month: nepaliDate.month,
-          day: nepaliDate.day,
-        );
-      });
-    }
   }
 
   // Removed: custom day input deprecated in favor of Nepali date selection

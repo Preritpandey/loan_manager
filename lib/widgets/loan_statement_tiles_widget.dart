@@ -282,99 +282,167 @@ class _StatementSectionState extends State<_StatementSection> {
 
     DateTime lastDate = loan.date;
 
+    // Group repayments by date to detect overall payments (interest + principal on same date)
+    final Map<DateTime, List<PartialRepayment>> repaymentsByDate = {};
     for (final r in repayments) {
-      final days = r.date.difference(lastDate).inDays;
-      if (days > 0 && principal > 0) {
-        accrued += (principal * dailyRate * days) / 100.0;
+      // Normalize date to ignore time component for grouping
+      final dateKey = DateTime(r.date.year, r.date.month, r.date.day);
+      repaymentsByDate.putIfAbsent(dateKey, () => []).add(r);
+    }
+
+    for (final dateKey in repaymentsByDate.keys.toList()..sort()) {
+      final sameDateRepayments = repaymentsByDate[dateKey]!;
+
+      // Check if this is an overall payment: two repayments on same date, one interest-only (-1) and one principal-only (-2)
+      if (sameDateRepayments.length == 2) {
+        final r1 = sameDateRepayments[0];
+        final r2 = sameDateRepayments[1];
+        final isOverallPayment =
+            (r1.daysSinceLoan == -1 && r2.daysSinceLoan == -2) ||
+            (r1.daysSinceLoan == -2 && r2.daysSinceLoan == -1);
+
+        if (isOverallPayment) {
+          // Combine into single overall payment event
+          final interestRepayment = r1.daysSinceLoan == -1 ? r1 : r2;
+          final principalRepayment = r1.daysSinceLoan == -2 ? r1 : r2;
+
+          final days = dateKey.difference(lastDate).inDays;
+          if (days > 0 && principal > 0) {
+            accrued += (principal * dailyRate * days) / 100.0;
+          }
+
+          // Process interest portion
+          double interestPortion = interestRepayment.amount;
+          if (interestPortion > accrued) {
+            interestPortion = accrued;
+          }
+          accrued -= interestPortion;
+
+          // Process principal portion
+          double principalPortion = principalRepayment.amount;
+          if (principalPortion > principal) {
+            principalPortion = principal;
+          }
+          principal -= principalPortion;
+
+          final totalAmount =
+              interestRepayment.amount + principalRepayment.amount;
+
+          events.add(
+            _StatementEvent(
+              date: dateKey,
+              type: _EventType.mixedPayment,
+              amount: totalAmount,
+              interestPortion: interestPortion,
+              principalPortion: principalPortion,
+              extraInterest: 0.0,
+            ),
+          );
+
+          lastDate = dateKey;
+          continue;
+        }
       }
 
-      // Handle top-ups (negative amounts) differently
-      if (r.amount < 0) {
-        // This is a top-up (additional disbursement)
+      // Process repayments individually (not an overall payment)
+      for (final r in sameDateRepayments) {
+        final days = r.date.difference(lastDate).inDays;
+        if (days > 0 && principal > 0) {
+          accrued += (principal * dailyRate * days) / 100.0;
+        }
+
+        // Handle top-ups (negative amounts) differently
+        if (r.amount < 0) {
+          // This is a top-up (additional disbursement)
+          events.add(
+            _StatementEvent(
+              date: r.date,
+              type: _EventType.topUp,
+              amount: -r.amount, // Make it positive for display
+              note: 'Additional loan amount',
+            ),
+          );
+          principal += (-r.amount); // Increase principal
+          lastDate = r.date;
+          continue;
+        }
+
+        // Handle regular repayments (positive amounts)
+        double remaining = r.amount;
+        double interestPortion = 0.0;
+        double principalPortion = 0.0;
+        double extraInterest = 0.0;
+
+        // Principal-only marker: if daysSinceLoan == -2, do NOT pay accrued; reduce principal directly
+        if (remaining > 0 && r.daysSinceLoan == -2) {
+          final payPrincipal = remaining >= principal ? principal : remaining;
+          principalPortion += payPrincipal;
+          principal -= payPrincipal;
+          remaining -= payPrincipal;
+
+          if (remaining > 0) {
+            // Any leftover counted as extra interest safeguard (shouldn't normally occur)
+            extraInterest += remaining;
+            remaining = 0.0;
+          }
+        } else {
+          // Pay accrued interest first
+          if (remaining > 0) {
+            final payInterest = remaining <= accrued ? remaining : accrued;
+            interestPortion += payInterest;
+            accrued -= payInterest;
+            remaining -= payInterest;
+          }
+
+          // Interest-only marker: if daysSinceLoan < 0, do NOT reduce principal. Any remaining -> extra interest.
+          if (remaining > 0 && r.daysSinceLoan < 0) {
+            extraInterest += remaining;
+            remaining = 0.0;
+          } else {
+            // Then principal
+            if (remaining > 0) {
+              final payPrincipal = remaining >= principal
+                  ? principal
+                  : remaining;
+              principalPortion += payPrincipal;
+              principal -= payPrincipal;
+              remaining -= payPrincipal;
+            }
+          }
+        }
+
+        // Any leftover is extra interest (beyond accrued)
+        if (remaining > 0) {
+          extraInterest += remaining;
+          remaining = 0.0;
+        }
+
+        // Determine the specific type of repayment
+        _EventType repaymentType = _EventType.repayment;
+        if (principalPortion > 0 &&
+            interestPortion == 0 &&
+            extraInterest == 0) {
+          repaymentType = _EventType.principalOnly;
+        } else if (principalPortion == 0 &&
+            (interestPortion > 0 || extraInterest > 0)) {
+          repaymentType = _EventType.interestOnly;
+        } else if (principalPortion > 0 && interestPortion > 0) {
+          repaymentType = _EventType.mixedPayment;
+        }
+
         events.add(
           _StatementEvent(
             date: r.date,
-            type: _EventType.topUp,
-            amount: -r.amount, // Make it positive for display
-            note: 'Additional loan amount',
+            type: repaymentType,
+            amount: r.amount,
+            interestPortion: interestPortion,
+            principalPortion: principalPortion,
+            extraInterest: extraInterest,
           ),
         );
-        principal += (-r.amount); // Increase principal
+
         lastDate = r.date;
-        continue;
       }
-
-      // Handle regular repayments (positive amounts)
-      double remaining = r.amount;
-      double interestPortion = 0.0;
-      double principalPortion = 0.0;
-      double extraInterest = 0.0;
-
-      // Principal-only marker: if daysSinceLoan == -2, do NOT pay accrued; reduce principal directly
-      if (remaining > 0 && r.daysSinceLoan == -2) {
-        final payPrincipal = remaining >= principal ? principal : remaining;
-        principalPortion += payPrincipal;
-        principal -= payPrincipal;
-        remaining -= payPrincipal;
-
-        if (remaining > 0) {
-          // Any leftover counted as extra interest safeguard (shouldn't normally occur)
-          extraInterest += remaining;
-          remaining = 0.0;
-        }
-      } else {
-        // Pay accrued interest first
-        if (remaining > 0) {
-          final payInterest = remaining <= accrued ? remaining : accrued;
-          interestPortion += payInterest;
-          accrued -= payInterest;
-          remaining -= payInterest;
-        }
-
-        // Interest-only marker: if daysSinceLoan < 0, do NOT reduce principal. Any remaining -> extra interest.
-        if (remaining > 0 && r.daysSinceLoan < 0) {
-          extraInterest += remaining;
-          remaining = 0.0;
-        } else {
-          // Then principal
-          if (remaining > 0) {
-            final payPrincipal = remaining >= principal ? principal : remaining;
-            principalPortion += payPrincipal;
-            principal -= payPrincipal;
-            remaining -= payPrincipal;
-          }
-        }
-      }
-
-      // Any leftover is extra interest (beyond accrued)
-      if (remaining > 0) {
-        extraInterest += remaining;
-        remaining = 0.0;
-      }
-
-      // Determine the specific type of repayment
-      _EventType repaymentType = _EventType.repayment;
-      if (principalPortion > 0 && interestPortion == 0 && extraInterest == 0) {
-        repaymentType = _EventType.principalOnly;
-      } else if (principalPortion == 0 &&
-          (interestPortion > 0 || extraInterest > 0)) {
-        repaymentType = _EventType.interestOnly;
-      } else if (principalPortion > 0 && interestPortion > 0) {
-        repaymentType = _EventType.mixedPayment;
-      }
-
-      events.add(
-        _StatementEvent(
-          date: r.date,
-          type: repaymentType,
-          amount: r.amount,
-          interestPortion: interestPortion,
-          principalPortion: principalPortion,
-          extraInterest: extraInterest,
-        ),
-      );
-
-      lastDate = r.date;
     }
 
     // Note: Removed additional loans from statement as they should not appear
@@ -496,8 +564,7 @@ class _StatementRow extends StatelessWidget {
                     ),
                     if (event.type == _EventType.repayment ||
                         event.type == _EventType.principalOnly ||
-                        event.type == _EventType.interestOnly ||
-                        event.type == _EventType.mixedPayment) ...[
+                        event.type == _EventType.interestOnly) ...[
                       if (event.principalPortion > 0)
                         _chip(
                           'Principal ${event.principalPortion.toStringAsFixed(2)}',

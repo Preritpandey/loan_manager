@@ -1,4 +1,5 @@
 import 'package:nepali_utils/nepali_utils.dart';
+import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 /// Utility class for working with Nepali (Bikram Sambat) dates
 class NepaliDate {
@@ -20,20 +21,133 @@ class NepaliDate {
     );
   }
 
-  /// Today's Nepali date (using nepali_utils)
+  /// Today's Nepali date
+  /// Tries nepali_date_picker first (better timezone handling), then falls back to nepali_utils
   factory NepaliDate.today() {
+    NepaliDate? calculatedDate;
+    
     try {
-      final now = NepaliDateTime.now();
-      return NepaliDate(
-        year: now.year,
-        month: now.month,
-        day: now.day,
+      // Try nepali_date_picker's NepaliDateTime.now() first as it may handle timezones better
+      final pickerNow = picker.NepaliDateTime.now();
+      calculatedDate = NepaliDate(
+        year: pickerNow.year,
+        month: pickerNow.month,
+        day: pickerNow.day,
       );
     } catch (e) {
-      print('ERROR in NepaliDate.today(): $e');
-      print('Stack trace: ${StackTrace.current}');
-      // Fallback to hardcoded date
-      return NepaliDate(year: 2080, month: 7, day: 23);
+      print('ERROR in picker.NepaliDateTime.now(): $e');
+      // Fallback to nepali_utils with explicit local time handling
+      try {
+        // Get local DateTime and ensure it's in local timezone (not UTC)
+        final localNow = DateTime.now().toLocal();
+        // Create a date-only DateTime at noon local time to avoid timezone boundary issues
+        final localDateAtNoon = DateTime(
+          localNow.year,
+          localNow.month,
+          localNow.day,
+          12, // noon
+          0,
+          0,
+          0,
+          0,
+        );
+        // Convert using fromDateTime which should respect the local timezone
+        final nepaliDate = NepaliDateTime.fromDateTime(localDateAtNoon);
+        calculatedDate = NepaliDate(
+          year: nepaliDate.year,
+          month: nepaliDate.month,
+          day: nepaliDate.day,
+        );
+      } catch (e2) {
+        print('ERROR in NepaliDateTime.fromDateTime fallback: $e2');
+        // Final fallback: try NepaliDateTime.now() directly
+        try {
+          final nepaliNow = NepaliDateTime.now();
+          calculatedDate = NepaliDate(
+            year: nepaliNow.year,
+            month: nepaliNow.month,
+            day: nepaliNow.day,
+          );
+        } catch (e3) {
+          print('ERROR in NepaliDateTime.now() final fallback: $e3');
+          // Ultimate fallback to hardcoded date
+          calculatedDate = NepaliDate(year: 2080, month: 7, day: 23);
+        }
+      }
+    }
+    
+    return calculatedDate;
+  }
+  
+  /// Subtract days from this NepaliDate
+  /// Uses direct day subtraction to avoid timezone conversion issues
+  NepaliDate subtractDays(int days) {
+    if (days == 0) return this;
+    if (days < 0) return addDays(-days);
+    
+    // For small day adjustments (like 1 day), directly manipulate the day field
+    // This completely avoids timezone conversion issues
+    if (days == 1 && day > 1) {
+      // Simple case: just subtract 1 from day if it's not the first day
+      return NepaliDate(year: year, month: month, day: day - 1);
+    }
+    
+    // For larger adjustments or edge cases, use NepaliDateTime manipulation
+    try {
+      final nepaliDateTime = NepaliDateTime(year, month, day);
+      final adjustedNepali = nepaliDateTime.subtract(Duration(days: days));
+      return NepaliDate(
+        year: adjustedNepali.year,
+        month: adjustedNepali.month,
+        day: adjustedNepali.day,
+      );
+    } catch (e) {
+      // If direct manipulation fails, try going through Gregorian but use picker
+      final gregorian = toGregorian();
+      final adjustedGregorian = gregorian.subtract(Duration(days: days));
+      try {
+        final pickerDate = picker.NepaliDateTime.fromDateTime(adjustedGregorian);
+        return NepaliDate(
+          year: pickerDate.year,
+          month: pickerDate.month,
+          day: pickerDate.day,
+        );
+      } catch (e2) {
+        return NepaliDate.fromGregorian(adjustedGregorian);
+      }
+    }
+  }
+  
+  /// Add days to this NepaliDate
+  /// Uses direct Nepali date manipulation to avoid timezone conversion issues
+  NepaliDate addDays(int days) {
+    if (days == 0) return this;
+    if (days < 0) return subtractDays(-days);
+    
+    // Directly manipulate Nepali date to avoid timezone conversion issues
+    try {
+      final nepaliDateTime = NepaliDateTime(year, month, day);
+      final adjustedNepali = nepaliDateTime.add(Duration(days: days));
+      return NepaliDate(
+        year: adjustedNepali.year,
+        month: adjustedNepali.month,
+        day: adjustedNepali.day,
+      );
+    } catch (e) {
+      // Fallback to Gregorian conversion if direct manipulation fails
+      final gregorian = toGregorian();
+      final adjustedGregorian = gregorian.add(Duration(days: days));
+      // Use picker's conversion which might be more accurate
+      try {
+        final pickerDate = picker.NepaliDateTime.fromDateTime(adjustedGregorian);
+        return NepaliDate(
+          year: pickerDate.year,
+          month: pickerDate.month,
+          day: pickerDate.day,
+        );
+      } catch (e2) {
+        return NepaliDate.fromGregorian(adjustedGregorian);
+      }
     }
   }
 

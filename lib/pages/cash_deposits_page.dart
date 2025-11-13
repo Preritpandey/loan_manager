@@ -5,7 +5,6 @@ import 'package:list/models/deposit.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 import 'package:list/widgets/search_bar_widget.dart';
-import 'package:list/widgets/info_card_widget.dart';
 
 class CashDepositsPage extends StatefulWidget {
   const CashDepositsPage({super.key});
@@ -394,7 +393,8 @@ class _AddDepositPageState extends State<AddDepositPage> {
   }
 
   Future<void> _pickNepaliDate() async {
-    final initial = picker.NepaliDateTime.now();
+    final today = NepaliDate.today();
+    final initial = picker.NepaliDateTime(today.year, today.month, today.day);
     final selected = await picker.showMaterialDatePicker(
       context: context,
       initialDate: initial,
@@ -571,7 +571,8 @@ class DepositDetailPage extends StatelessWidget {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onTap: () async {
-                    final initial = picker.NepaliDateTime.now();
+                    final today = NepaliDate.today();
+                    final initial = picker.NepaliDateTime(today.year, today.month, today.day);
                     final selected = await picker.showMaterialDatePicker(
                       context: context,
                       initialDate: initial,
