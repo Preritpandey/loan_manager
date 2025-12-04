@@ -33,7 +33,6 @@ class _LoanHomePageState extends State<LoanHomePage>
   late Animation<double> _fadeAnimation;
   bool _showSuggestions = false;
 
-
   @override
   void initState() {
     super.initState();
@@ -49,7 +48,7 @@ class _LoanHomePageState extends State<LoanHomePage>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
-    
+
     // Initialize BankLoanController
     Get.put(BankLoanController());
   }
@@ -69,7 +68,6 @@ class _LoanHomePageState extends State<LoanHomePage>
       controller.refreshLoans();
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -98,242 +96,319 @@ class _LoanHomePageState extends State<LoanHomePage>
         body: Center(
           child: Container(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Obx(() {
-                if (controller.isLoading.value) {
-                  return const LoadingStateWidget();
-                }
+            child: Column(
+              children: [
+                // Bank Deposits Row - Centered at top
+                // Container(
+                //   width: double.infinity,
+                //   padding: const EdgeInsets.symmetric(vertical: 8.0),
+                //   decoration: BoxDecoration(
+                //     color: Colors.white,
+                //     boxShadow: [
+                //       BoxShadow(
+                //         color: Colors.grey.withOpacity(0.2),
+                //         spreadRadius: 1,
+                //         blurRadius: 3,
+                //         offset: const Offset(0, 2),
+                //       ),
+                //     ],
+                //   ),
+                //   child: Center(
+                //     child: Obx(() {
+                //       final bankLoanController = Get.find<BankLoanController>();
+                //       if (bankLoanController.isLoading.value ||
+                //           bankLoanController.bankLoans.isEmpty) {
+                //         return const SizedBox.shrink();
+                //       }
 
-                final groupedLoans = controller.getLoansGroupedByCustomer();
-                final customerNames = groupedLoans.keys.toList();
+                //       return Container(
+                //         constraints: BoxConstraints(maxWidth: maxWidth),
+                //         padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                //         child: Row(
+                //           mainAxisAlignment: MainAxisAlignment.center,
+                //           children: [
+                //             // Bank Deposits Button
+                //             ElevatedButton.icon(
+                //               onPressed: () {
+                //                 Get.to(() => BankLoansPage());
+                //               },
+                //               icon: const Icon(Icons.account_balance, size: 16),
+                //               label: const Text('View Bank Deposits'),
+                //               style: ElevatedButton.styleFrom(
+                //                 backgroundColor: Colors.purple,
+                //                 foregroundColor: Colors.white,
+                //                 padding: const EdgeInsets.symmetric(
+                //                   vertical: 8,
+                //                   horizontal: 12,
+                //                 ),
+                //                 shape: RoundedRectangleBorder(
+                //                   borderRadius: BorderRadius.circular(8),
+                //                 ),
+                //               ),
+                //             ),
 
-                // Show empty state only if there are no loans at all
-                if (customerNames.isEmpty && controller.loans.isEmpty) {
-                  return const EmptyStateWidget();
-                }
+                //             const SizedBox(width: 16),
 
-                // Show no results state only after explicit search
-                if (controller.shouldShowNoResults()) {
-                  return NoResultsWidget(
-                    searchQuery: searchController.text,
-                    onBackToAllLoans: () {
-                      searchController.clear();
-                      controller.clearSearch();
-                      setState(() {
-                        _showSuggestions = false;
-                      });
-                    },
-                    onAddNewLoan: () => Get.toNamed('/add'),
-                  );
-                }
+                //             // Total Amount in Bank
+                //             Text(
+                //               'Total in Bank: ',
+                //               style: TextStyle(
+                //                 fontSize: 14,
+                //                 color: Colors.grey[700],
+                //                 fontWeight: FontWeight.w500,
+                //               ),
+                //             ),
+                //             Text(
+                //               'रु ${bankLoanController.totalDepositedAmount.toStringAsFixed(2)}',
+                //               style: const TextStyle(
+                //                 fontSize: 14,
+                //                 fontWeight: FontWeight.bold,
+                //                 color: Color.fromARGB(255, 204, 21, 27),
+                //               ),
+                //             ),
+                //           ],
+                //         ),
+                //       );
+                //     }),
+                //   ),
+                // ),
+                Expanded(
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Obx(() {
+                      if (controller.isLoading.value) {
+                        return const LoadingStateWidget();
+                      }
 
-                return SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      // Search Bar
-                      SearchBarWidget(
-                        controller: searchController,
-                        focusNode: searchFocusNode,
-                        isDesktop: isDesktop,
-                        padding: padding,
-                        onChanged: (value) {
-                          controller.search(value);
-                          setState(() {
-                            _showSuggestions = value.isNotEmpty;
-                          });
-                        },
-                        onSubmitted: (value) {
-                          controller.performExplicitSearch(value);
-                          setState(() {
-                            _showSuggestions = false;
-                          });
-                        },
-                        onTap: () {
-                          if (searchController.text.isNotEmpty) {
-                            setState(() {
-                              _showSuggestions = true;
-                            });
-                          }
-                        },
-                        onClear: () {
-                          searchController.clear();
-                          controller.clearSearch();
-                          setState(() {
-                            _showSuggestions = false;
-                          });
-                        },
-                      ),
+                      final groupedLoans = controller
+                          .getLoansGroupedByCustomer();
+                      final customerNames = groupedLoans.keys.toList();
 
-                      // Search Suggestions
-                      if (_showSuggestions &&
-                          controller.searchSuggestions.isNotEmpty)
-                        SearchSuggestionsWidget(
-                          suggestions: controller.searchSuggestions,
-                          padding: padding,
-                          isDesktop: isDesktop,
-                          onSuggestionTap: (suggestion) {
-                            searchController.text = suggestion;
-                            controller.performExplicitSearch(suggestion);
-                            setState(() {
-                              _showSuggestions = false;
-                            });
-                            searchFocusNode.unfocus();
-                          },
-                        ),
+                      // Show empty state only if there are no loans at all
+                      if (customerNames.isEmpty && controller.loans.isEmpty) {
+                        return const EmptyStateWidget();
+                      }
 
-                      // Search Results Indicator
-                      if (controller.getIsSearchActive())
-                        SearchResultsIndicatorWidget(
-                          resultCount: controller.getFilteredLoans().length,
-                          padding: padding,
-                          isDesktop: isDesktop,
-                          onClear: () {
+                      // Show no results state only after explicit search
+                      if (controller.shouldShowNoResults()) {
+                        return NoResultsWidget(
+                          searchQuery: searchController.text,
+                          onBackToAllLoans: () {
                             searchController.clear();
                             controller.clearSearch();
                             setState(() {
                               _showSuggestions = false;
                             });
                           },
-                        ),
+                          onAddNewLoan: () => Get.toNamed('/add'),
+                        );
+                      }
 
-                      // Bank Loans Button
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Get.to(() => BankLoansPage());
-                          },
-                          icon: const Icon(Icons.account_balance, size: 18),
-                          label: const Text('View Bank Deposits'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      return SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            // Search Bar
+                            SearchBarWidget(
+                              controller: searchController,
+                              focusNode: searchFocusNode,
+                              isDesktop: isDesktop,
+                              padding: padding,
+                              onChanged: (value) {
+                                controller.search(value);
+                                setState(() {
+                                  _showSuggestions = value.isNotEmpty;
+                                });
+                              },
+                              onSubmitted: (value) {
+                                controller.performExplicitSearch(value);
+                                setState(() {
+                                  _showSuggestions = false;
+                                });
+                              },
+                              onTap: () {
+                                if (searchController.text.isNotEmpty) {
+                                  setState(() {
+                                    _showSuggestions = true;
+                                  });
+                                }
+                              },
+                              onClear: () {
+                                searchController.clear();
+                                controller.clearSearch();
+                                setState(() {
+                                  _showSuggestions = false;
+                                });
+                              },
                             ),
-                          ),
-                        ),
-                      ),
-                      
-                      // Single Summary Card
-                      LoanSummaryCard(
-                        padding: padding,
-                        isDesktop: isDesktop,
-                        totalLoans: controller.getTotalLoansCount(),
-                        totalDue: controller.getTotalDueAmount(),
-                        overdueLoans: controller.getOverdueLoansCount(),
-                        totalReceived: controller.getTotalReceivedAmount(),
-                        totalPrincipalDue: controller.getTotalPrincipalDue(),
-                        totalInterestDue: controller.getTotalInterestDue(),
-                        onOverdueTap: () {
-                          _showOverdueOnly.value = !_showOverdueOnly.value;
-                          if (_showOverdueOnly.value) {
-                            // Show only overdue loans
-                            final overdueLoans = controller.getOverdueLoans();
-                            controller.filteredLoans.value = overdueLoans;
-                          } else {
-                            // Show all loans
-                            controller.filteredLoans.value = controller.loans;
-                          }
-                        },
-                      ),
 
-                      // Cash Deposits section
-                      Padding(
-                        padding: padding,
-                        child: Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            leading: const Icon(Icons.account_balance_wallet),
-                            title: const Text(
-                              'Cash Deposits',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: const Text(
-                              'Record and manage cash deposits with manual Nepali dates',
-                            ),
-                            trailing: ElevatedButton(
-                              onPressed: () => Get.toNamed('/cash-deposits'),
-                              child: const Text('Open'),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Show message when only overdue loans are being shown
-                      if (_showOverdueOnly.value)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 8.0,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline, color: Colors.orange),
-                              SizedBox(width: 8),
-                              Text(
-                                'Showing overdue loans only. ',
-                                style: TextStyle(color: Colors.orange),
+                            // Search Suggestions
+                            if (_showSuggestions &&
+                                controller.searchSuggestions.isNotEmpty)
+                              SearchSuggestionsWidget(
+                                suggestions: controller.searchSuggestions,
+                                padding: padding,
+                                isDesktop: isDesktop,
+                                onSuggestionTap: (suggestion) {
+                                  searchController.text = suggestion;
+                                  controller.performExplicitSearch(suggestion);
+                                  setState(() {
+                                    _showSuggestions = false;
+                                  });
+                                  searchFocusNode.unfocus();
+                                },
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  _showOverdueOnly.value = false;
+
+                            // Search Results Indicator
+                            if (controller.getIsSearchActive())
+                              SearchResultsIndicatorWidget(
+                                resultCount: controller
+                                    .getFilteredLoans()
+                                    .length,
+                                padding: padding,
+                                isDesktop: isDesktop,
+                                onClear: () {
+                                  searchController.clear();
+                                  controller.clearSearch();
+                                  setState(() {
+                                    _showSuggestions = false;
+                                  });
+                                },
+                              ),
+
+                            // Single Summary Card
+                            LoanSummaryCard(
+                              padding: padding,
+                              isDesktop: isDesktop,
+                              totalLoans: controller.getTotalLoansCount(),
+                              totalDue: controller.getTotalDueAmount(),
+                              overdueLoans: controller.getOverdueLoansCount(),
+                              totalReceived: controller
+                                  .getTotalReceivedAmount(),
+                              totalPrincipalDue: controller
+                                  .getTotalPrincipalDue(),
+                              totalInterestDue: controller
+                                  .getTotalInterestDue(),
+                              onOverdueTap: () {
+                                _showOverdueOnly.value =
+                                    !_showOverdueOnly.value;
+                                if (_showOverdueOnly.value) {
+                                  // Show only overdue loans
+                                  final overdueLoans = controller
+                                      .getOverdueLoans();
+                                  controller.filteredLoans.value = overdueLoans;
+                                } else {
+                                  // Show all loans
                                   controller.filteredLoans.value =
                                       controller.loans;
-                                },
-                                child: Text('Show all loans'),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size(0, 0),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
+                                }
+                              },
+                            ),
+
+                            // Cash Deposits section
+                            Padding(
+                              padding: padding,
+                              child: Card(
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  leading: const Icon(
+                                    Icons.account_balance_wallet,
+                                  ),
+                                  title: const Text(
+                                    'Cash Deposits',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'Record and manage cash deposits with manual Nepali dates',
+                                  ),
+                                  trailing: ElevatedButton(
+                                    onPressed: () =>
+                                        Get.toNamed('/cash-deposits'),
+                                    child: const Text('Open'),
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
 
-                      // Loans List
-                      LoansListWidget(
-                        customerNames: _showOverdueOnly.value
-                            ? controller
-                                  .getOverdueLoans()
-                                  .map((loan) => loan.name)
-                                  .toSet()
-                                  .toList()
-                            : customerNames,
-                        groupedLoans: _showOverdueOnly.value
-                            ? controller
-                                  .getOverdueLoans()
-                                  .fold<Map<String, List<Loan>>>({}, (
-                                    map,
-                                    loan,
-                                  ) {
-                                    map[loan.name] = controller
+                            // Show message when only overdue loans are being shown
+                            if (_showOverdueOnly.value)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: Colors.orange,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Showing overdue loans only. ',
+                                      style: TextStyle(color: Colors.orange),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        _showOverdueOnly.value = false;
+                                        controller.filteredLoans.value =
+                                            controller.loans;
+                                      },
+                                      child: Text('Show all loans'),
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size(0, 0),
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Loans List
+                            LoansListWidget(
+                              customerNames: _showOverdueOnly.value
+                                  ? controller
                                         .getOverdueLoans()
-                                        .where((l) => l.name == loan.name)
-                                        .toList();
-                                    return map;
-                                  })
-                            : groupedLoans,
-                        padding: padding,
-                        isDesktop: isDesktop,
-                        totalLoansCount: _showOverdueOnly.value
-                            ? controller.getOverdueLoansCount()
-                            : controller.getTotalLoansCount(),
-                      ),
+                                        .map((loan) => loan.name)
+                                        .toSet()
+                                        .toList()
+                                  : customerNames,
+                              groupedLoans: _showOverdueOnly.value
+                                  ? controller
+                                        .getOverdueLoans()
+                                        .fold<Map<String, List<Loan>>>({}, (
+                                          map,
+                                          loan,
+                                        ) {
+                                          map[loan.name] = controller
+                                              .getOverdueLoans()
+                                              .where((l) => l.name == loan.name)
+                                              .toList();
+                                          return map;
+                                        })
+                                  : groupedLoans,
+                              padding: padding,
+                              isDesktop: isDesktop,
+                              totalLoansCount: _showOverdueOnly.value
+                                  ? controller.getOverdueLoansCount()
+                                  : controller.getTotalLoansCount(),
+                            ),
 
-                      // Bottom padding for FAB
-                      const SizedBox(height: 100),
-                    ],
+                            // Bottom padding for FAB
+                            const SizedBox(height: 100),
+                          ],
+                        ),
+                      );
+                    }),
                   ),
-                );
-              }),
+                ),
+              ],
             ),
           ),
         ),

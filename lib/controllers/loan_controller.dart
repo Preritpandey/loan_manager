@@ -33,26 +33,43 @@ class LoanController extends GetxController {
     required String type,
     required DateTime recordedDate,
     required double amount,
-    required String jewelleryName,
-    double? dueAfter,
     String? description,
+    String? jewelleryName,
+    double? dueAfter,
+    bool isInterestOnly = false,
   }) {
-    try {
-      final box = Hive.box<LoanPerformedEvent>('events');
-      final event = LoanPerformedEvent(
-        name: name,
-        serialNumber: serial,
-        type: type,
-        amount: amount,
-        recordedDate: recordedDate,
-        jewelleryName: jewelleryName,
-        dueAfter: dueAfter,
-        description: description,
-      );
-      box.add(event);
-    } catch (e) {
-      // ignore event write failures
+    // Ensure performedAt is set to the current date (midnight) for proper filtering
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // Set description based on payment type
+    String? enhancedDescription = description;
+    if (type == 'repayment') {
+      if (description == null || description == 'Payment received' || description == 'Overall payment received') {
+        enhancedDescription = isInterestOnly ? 'Interest Collection' : 'Overall Payment';
+      } else if (description == 'Interest payment received' || description.contains('Interest')) {
+        enhancedDescription = 'Interest Collection';
+      } else if (description.contains('Principal')) {
+        enhancedDescription = 'Principal Payment';
+      } else if (description.contains('Full Payment') || description.contains('Overall Payment')) {
+        enhancedDescription = 'Overall Payment';
+      } else {
+        enhancedDescription = 'Payment';
+      }
     }
+    
+    final event = LoanPerformedEvent(
+      name: name,
+      serialNumber: serial,
+      type: type,
+      amount: amount,
+      recordedDate: recordedDate,
+      performedAt: today,  // Set to today's date at midnight for consistent filtering
+      description: enhancedDescription,
+      jewelleryName: jewelleryName ?? '-',
+      dueAfter: dueAfter,
+    );
+    Hive.box<LoanPerformedEvent>('events').add(event);
   }
 
   // Export today's transactions (loans + deposits) to PDF using performed events
@@ -79,23 +96,32 @@ class LoanController extends GetxController {
       // Map events to simple rows with display fields
       final rows = todays.map<Map<String, String>>((e) {
         final nep = NepaliDate.fromGregorian(e.recordedDate).format();
-        String desc;
+        String desc = e.description ?? e.type;
+        
+        // Process different types of transactions
         switch (e.type) {
-          case 'disbursement':
-            desc = e.description ?? 'Loan disbursed';
-            break;
           case 'repayment':
-            desc = e.description ?? 'Payment received';
+            // Keep the description as is if it's already set meaningfully
+            if (desc.isEmpty || 
+                desc == 'Payment received' || 
+                desc == 'Overall payment received') {
+              desc = 'Overall Payment';
+            } else if (desc.contains('Interest Collection') || 
+                      desc == 'Interest payment received') {
+              desc = 'Interest Collection';
+            } else if (desc.contains('Principal')) {
+              desc = 'Principal Payment';
+            } else {
+              desc = 'Payment';
+            }
+            break;
+          case 'disbursement':
+            desc = 'Loan Disbursement';
             break;
           case 'topup':
-            desc = e.description ?? 'Top-up added';
+            desc = 'Loan Top-up';
             break;
-          case 'deposit':
-          case 'withdrawal':
-            desc = e.description ?? e.type;
-            break;
-          default:
-            desc = e.description ?? e.type;
+          // Add other cases as needed
         }
         return {
           'name': e.name,
@@ -521,23 +547,56 @@ class LoanController extends GetxController {
         }
       }
 
+      // Save the loan to ensure all changes are persisted
       loan.addPartialRepayment(
         adjustedAmount,
         effectiveDate,
         interestOnly: interestOnly,
         principalOnly: principalOnly,
       );
+      
+      // Save the loan to Hive
+      loan.save();
+      
+      // Force a refresh of the loan data from the database
+      final refreshedLoan = loanBox.get(loan.key);
+      if (refreshedLoan != null) {
+        loans[loanIndex] = refreshedLoan;
+        // Update filtered loans to trigger UI refresh
+        filteredLoans[filteredLoans.indexWhere((l) => l.serialNumber == refreshedLoan.serialNumber)] = refreshedLoan;
+      } else {
+        // Fallback to the updated loan if refresh fails
+        loans[loanIndex] = loan;
+        filteredLoans[filteredLoans.indexWhere((l) => l.serialNumber == loan.serialNumber)] = loan;
+      }
+      
+      // Force a UI update by creating a new list
+      filteredLoans.refresh();
+      loans.refresh();
+      
+      // Notify all listeners
+      update(['loan_summary']); // Specific ID for loan summary updates
+      String paymentType;
+      if (interestOnly) {
+        paymentType = 'Interest';
+      } else if (principalOnly) {
+        paymentType = 'Principal';
+      } else if (adjustedAmount >= (loan.dueAmount * 0.9)) { // If payment is 90% or more of due, consider it full payment
+        paymentType = 'Full Payment';
+      } else {
+        paymentType = 'Partial Payment';
+      }
+
       _recordEvent(
         name: loan.name,
         serial: loan.serialNumber,
         type: 'repayment',
         recordedDate: effectiveDate,
         amount: adjustedAmount,
+        description: paymentType == 'Interest' ? 'Interest Collection' : '$paymentType: NPR ${adjustedAmount.toStringAsFixed(2)}',
         jewelleryName: loan.jewelleryName,
-        dueAfter: loan.dueAmount,
-        description: interestOnly
-            ? 'Interest payment received'
-            : (principalOnly ? 'Principal payment received' : 'Payment received'),
+        dueAfter: loan.outstandingDueAt(effectiveDate, forSettlement: false),
+        isInterestOnly: paymentType == 'Interest',
       );
       loan.save();
       loans[loanIndex] = loan;
@@ -591,10 +650,49 @@ class LoanController extends GetxController {
 
       final adjustedAmount = amount > outstanding ? outstanding : amount;
 
+      // Process the payment
       loan.addPartialRepayment(adjustedAmount, effectiveDate);
+      
+      // Save the loan to Hive
       loan.save();
-      loans[loanIndex] = loan;
-      filteredLoans.value = loans;
+      
+      // Force a refresh of the loan data from the database
+      final refreshedLoan = loanBox.get(loan.key);
+      if (refreshedLoan != null) {
+        loans[loanIndex] = refreshedLoan;
+        // Update filtered loans to trigger UI refresh
+        final filteredIndex = filteredLoans.indexWhere((l) => l.serialNumber == refreshedLoan.serialNumber);
+        if (filteredIndex != -1) {
+          filteredLoans[filteredIndex] = refreshedLoan;
+        }
+      } else {
+        // Fallback to the updated loan if refresh fails
+        loans[loanIndex] = loan;
+        final filteredIndex = filteredLoans.indexWhere((l) => l.serialNumber == loan.serialNumber);
+        if (filteredIndex != -1) {
+          filteredLoans[filteredIndex] = loan;
+        }
+      }
+      
+      // Record the payment event
+      _recordEvent(
+        name: loan.name,
+        serial: loan.serialNumber,
+        type: 'repayment',
+        recordedDate: effectiveDate,
+        amount: adjustedAmount,
+        description: 'Overall Payment: NPR ${adjustedAmount.toStringAsFixed(2)}',
+        jewelleryName: loan.jewelleryName,
+        dueAfter: loan.outstandingDueAt(effectiveDate, forSettlement: false),
+        isInterestOnly: false,
+      );
+      
+      // Force a UI update by refreshing the reactive lists
+      filteredLoans.refresh();
+      loans.refresh();
+      
+      // Notify all listeners, especially the loan summary
+      update(['loan_summary']);
     } catch (e) {
       print('Error adding partial repayment (settlement): $e');
       _showSnackbar('Error', 'Failed to add partial repayment');

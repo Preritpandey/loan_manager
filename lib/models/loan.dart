@@ -95,7 +95,8 @@ class Loan extends HiveObject {
   double accruedInterestAt(DateTime asOf, {bool forSettlement = false}) {
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     if (forSettlement) {
       final daysSinceStart = asOf.difference(date).inDays;
@@ -201,7 +202,9 @@ class Loan extends HiveObject {
           } else {
             // Then apply remaining payment to principal
             if (payment > 0) {
-              final principalPortion = payment >= principal ? principal : payment;
+              final principalPortion = payment >= principal
+                  ? principal
+                  : payment;
               principal -= principalPortion;
               payment -= principalPortion;
             }
@@ -251,7 +254,7 @@ class Loan extends HiveObject {
   double get currentCalculatedInterest {
     final asOf = DateTime.now();
     final totalDays = asOf.difference(date).inDays;
-    
+
     // If no partial repayments/top-ups, apply capitalization-at-due-date rule
     if (partialRepayments.isEmpty) {
       final firstPhaseDays = totalDays <= duration ? totalDays : duration;
@@ -259,34 +262,37 @@ class Loan extends HiveObject {
 
       // Calculate daily interest rate from annual rate
       final dailyRate = interestRate / 365.25;
-      
+
       // For non-overdue period (before due date)
       double firstPhaseInterest = 0.0;
       if (firstPhaseDays > 0) {
         // Calculate interest for the initial period up to due date
         firstPhaseInterest = (amountGiven * dailyRate * firstPhaseDays) / 100;
       }
-      
+
       // If not overdue, return just the first phase interest (with minimum 30 days if applicable)
       if (overdueDays <= 0) {
         // Apply minimum 30 days interest if settling early
         if (firstPhaseDays < 30) {
           final minInterest = (amountGiven * dailyRate * 30) / 100;
-          return minInterest > firstPhaseInterest ? minInterest : firstPhaseInterest;
+          return minInterest > firstPhaseInterest
+              ? minInterest
+              : firstPhaseInterest;
         }
         return firstPhaseInterest;
       }
-      
+
       // For overdue period (after due date) - Apply compounding
       // Calculate interest for the initial period (up to due date)
-      final firstPhaseInterestToDue = (amountGiven * dailyRate * duration) / 100;
-      
+      final firstPhaseInterestToDue =
+          (amountGiven * dailyRate * duration) / 100;
+
       // Calculate new principal at due date (original principal + interest up to due date)
       final principalAtDue = amountGiven + firstPhaseInterestToDue;
-      
+
       // Calculate interest for the overdue period on the new principal
       final overdueInterest = (principalAtDue * dailyRate * overdueDays) / 100;
-      
+
       // Return total interest (initial period + overdue period with compounding)
       return firstPhaseInterestToDue + overdueInterest;
     }
@@ -294,30 +300,32 @@ class Loan extends HiveObject {
     // For loans with partial repayments, use the ledger
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
-    
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+
     // If the loan is overdue, we need to ensure the overdue interest is compounded
     if (isOverdue) {
       final dueDate = date.add(Duration(days: duration));
       final overdueDays = asOf.difference(dueDate).inDays;
-      
+
       if (overdueDays > 0) {
         // Get the state of the loan at the due date
         final atDueDate = _ledgerUpTo(dueDate);
         final principalAtDue = atDueDate['principal'] ?? 0.0;
         final interestAtDue = atDueDate['accrued'] ?? 0.0;
-        
+
         // Calculate the new principal (original principal + interest up to due date)
         final newPrincipal = principalAtDue + interestAtDue;
-        
+
         // Calculate interest on the new principal for the overdue period
-        final overdueInterest = (newPrincipal * dailyInterestRate * overdueDays) / 100;
-        
+        final overdueInterest =
+            (newPrincipal * dailyInterestRate * overdueDays) / 100;
+
         // Update the accrued interest to include the compounded overdue interest
         accrued = interestAtDue + overdueInterest + (s['accrued'] ?? 0.0);
       }
     }
-    
+
     // Enforce minimum 30 days on early settlement check for non-overdue loans
     if (!isOverdue) {
       final daysSinceStart = asOf.difference(date).inDays;
@@ -327,7 +335,7 @@ class Loan extends HiveObject {
         if (shortfall > 0) accrued += shortfall;
       }
     }
-    
+
     return accrued;
   }
 
@@ -370,6 +378,10 @@ class Loan extends HiveObject {
   }
 
   bool get isOverdue {
+    // If the loan is fully paid, it can't be overdue
+    if (isFullyPaid) return false;
+
+    // Check if current date is past the due date
     return DateTime.now().difference(date).inDays > duration;
   }
 
@@ -427,25 +439,28 @@ class Loan extends HiveObject {
   }
 
   // Method to add partial repayment
-  void addPartialRepayment(double amount, DateTime repaymentDate, {bool interestOnly = false, bool principalOnly = false}) {
+  void addPartialRepayment(
+    double amount,
+    DateTime repaymentDate, {
+    bool interestOnly = false,
+    bool principalOnly = false,
+  }) {
     final computedDays = repaymentDate.difference(date).inDays;
-    
-    // For overall payments, we need to ensure the principal is fully paid off if the amount covers it
+
+    // Get current state before making any changes
+    final currentState = _ledgerUpTo(repaymentDate);
+    final currentPrincipal = currentState['principal'] ?? 0.0;
+    final currentAccrued = currentState['accrued'] ?? 0.0;
+    final totalOutstanding = currentPrincipal + currentAccrued;
+
+    // For overall payments, handle the full payment logic
     if (!interestOnly && !principalOnly) {
-      final s = _ledgerUpTo(repaymentDate);
-      final currentPrincipal = s['principal'] ?? 0.0;
-      final currentAccrued = s['accrued'] ?? 0.0;
-      final totalOutstanding = currentPrincipal + currentAccrued;
-      
       // If the payment covers the total outstanding, ensure principal is fully paid
       if (amount >= totalOutstanding) {
         // Check if loan was overdue before processing payment
         final wasOverdue = repaymentDate.difference(date).inDays > duration;
-        
-        // Calculate total interest BEFORE adding payment (since ledger will change after)
-        final totalInterest = totalOutstanding - currentPrincipal;
-      
-        // First, add a payment for the accrued interest
+
+        // First, add a payment for the accrued interest if any
         if (currentAccrued > 0) {
           partialRepayments.add(
             PartialRepayment(
@@ -455,7 +470,7 @@ class Loan extends HiveObject {
             ),
           );
         }
-        
+
         // Then add a payment for the remaining principal
         if (currentPrincipal > 0) {
           partialRepayments.add(
@@ -466,24 +481,71 @@ class Loan extends HiveObject {
             ),
           );
         }
-        
+
         amountReceived += amount;
-        
+
         // If loan was overdue and payment covers total interest or total due, clear overdue status
-        if (wasOverdue && (amount >= totalInterest || amount >= totalOutstanding)) {
+        if (wasOverdue && amount >= (currentAccrued + currentPrincipal)) {
           extendDurationToClearOverdue(repaymentDate);
         }
-        
+
+        if (isInBox) save();
+        return;
+      } else {
+        // For partial overall payments, handle it as a regular payment
+        // that should be applied to both interest and principal
+        var remainingAmount = amount;
+
+        // Pay off any accrued interest first
+        if (currentAccrued > 0 && remainingAmount > 0) {
+          final interestPayment = remainingAmount <= currentAccrued
+              ? remainingAmount
+              : currentAccrued;
+
+          partialRepayments.add(
+            PartialRepayment(
+              amount: interestPayment,
+              date: repaymentDate,
+              daysSinceLoan: -1, // Mark as interest payment
+            ),
+          );
+          remainingAmount -= interestPayment;
+        }
+
+        // Apply remaining to principal
+        if (remainingAmount > 0 && currentPrincipal > 0) {
+          final principalPayment = remainingAmount <= currentPrincipal
+              ? remainingAmount
+              : currentPrincipal;
+
+          partialRepayments.add(
+            PartialRepayment(
+              amount: principalPayment,
+              date: repaymentDate,
+              daysSinceLoan: -2, // Mark as principal payment
+            ),
+          );
+        }
+
+        amountReceived += amount;
         if (isInBox) save();
         return;
       }
     }
-    
+
     // Default behavior for regular partial payments
     final daysSinceLoan = interestOnly
         ? -1
         : (principalOnly ? -2 : computedDays);
-    
+
+    // Check if loan was overdue before processing payment
+    final wasOverdue = repaymentDate.difference(date).inDays > duration;
+
+    // Calculate total interest and total due BEFORE adding payment (since ledger will change after)
+    final totalDue = outstandingDueAt(repaymentDate, forSettlement: false);
+    final remainingPrincipal = remainingPrincipalAt(repaymentDate);
+    final totalInterest = totalDue - remainingPrincipal;
+
     partialRepayments.add(
       PartialRepayment(
         amount: amount,
@@ -492,20 +554,13 @@ class Loan extends HiveObject {
       ),
     );
     amountReceived += amount;
-    
+
     // Check if payment clears overdue status
     // If loan was overdue and payment >= total interest OR payment >= total due, extend duration
-    final wasOverdue = repaymentDate.difference(date).inDays > duration;
-    if (wasOverdue) {
-      final totalInterest = getTotalInterestAt(repaymentDate);
-      final totalDue = outstandingDueAt(repaymentDate, forSettlement: false);
-      
-      // If payment covers full interest or full due amount, clear overdue status
-      if (amount >= totalInterest || amount >= totalDue) {
-        extendDurationToClearOverdue(repaymentDate);
-      }
+    if (wasOverdue && (amount >= totalInterest || amount >= totalDue)) {
+      extendDurationToClearOverdue(repaymentDate);
     }
-    
+
     // Only save if the object is in a box (to avoid test errors)
     if (isInBox) {
       save();
@@ -550,41 +605,48 @@ class Loan extends HiveObject {
   // If forSettlement is true and asOf is within 30 days, enforce minimum 30-day interest.
   double outstandingDueAt(DateTime asOf, {bool forSettlement = false}) {
     // Calculate total days including today
-    final totalDays = asOf.difference(date).inDays + 1; // +1 to include both start and end days
+    final totalDays =
+        asOf.difference(date).inDays +
+        1; // +1 to include both start and end days
     final isOverdue = totalDays > duration;
-    
+
     // If no partial repayments/top-ups, apply capitalization-at-due-date rule
     if (partialRepayments.isEmpty) {
       final firstPhaseDays = totalDays <= duration ? totalDays : duration;
       final overdueDays = totalDays > duration ? (totalDays - duration) : 0;
 
       // For overdue loans, don't enforce the 30-day minimum interest rule
-      final appliedFirstPhaseDays = (firstPhaseDays < 30 && forSettlement && !isOverdue) 
-          ? 30 
+      final appliedFirstPhaseDays =
+          (firstPhaseDays < 30 && forSettlement && !isOverdue)
+          ? 30
           : firstPhaseDays;
 
       // Calculate first phase interest (up to due date or end of loan)
-      final i1 = (amountGiven * dailyInterestRate * appliedFirstPhaseDays) / 100;
-      
+      final i1 =
+          (amountGiven * dailyInterestRate * appliedFirstPhaseDays) / 100;
+
       if (!isOverdue) {
         return amountGiven + i1;
       }
-      
+
       // For overdue loans, calculate with compound interest after due date
-      final principalAtDue = amountGiven + (amountGiven * dailyInterestRate * duration) / 100;
+      final principalAtDue =
+          amountGiven + (amountGiven * dailyInterestRate * duration) / 100;
       final i2 = (principalAtDue * dailyInterestRate * overdueDays) / 100;
       return amountGiven + i1 + i2;
     }
-    
+
     // For loans with partial repayments, use the ledger
     final s = _ledgerUpTo(asOf);
     double principal = s['principal'] ?? 0.0;
     double accrued = s['accrued'] ?? 0.0;
-    final interestPaid = (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
+    final interestPaid =
+        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
 
     // Only enforce 30-day minimum for non-overdue loans when forSettlement is true
     if (forSettlement && !isOverdue) {
-      final daysSinceStart = asOf.difference(date).inDays + 1; // Include both start and end days
+      final daysSinceStart =
+          asOf.difference(date).inDays + 1; // Include both start and end days
       if (daysSinceStart < 30) {
         final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
         final shortfall = minInterest - (interestPaid + accrued);
@@ -611,12 +673,14 @@ class Loan extends HiveObject {
   }
 
   // Extend loan duration to clear overdue status
-  // This sets the duration so that the loan is no longer overdue as of the given date
+  // This extends the duration by one year from the payment date to prevent immediate re-overdue
   void extendDurationToClearOverdue(DateTime asOf) {
     final daysPassed = asOf.difference(date).inDays;
     if (daysPassed > duration) {
-      // Extend duration to the payment date to clear overdue status
-      duration = daysPassed;
+      // Extend duration by one year from the payment date to clear overdue status
+      final oneYearFromNow = asOf.add(Duration(days: 365));
+      final newDuration = oneYearFromNow.difference(date).inDays;
+      duration = newDuration;
       if (isInBox) save();
     }
   }

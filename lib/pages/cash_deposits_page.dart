@@ -73,7 +73,9 @@ class _CashDepositsPageState extends State<CashDepositsPage> {
                   // Header Summary
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Row(
@@ -82,13 +84,23 @@ class _CashDepositsPageState extends State<CashDepositsPage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Cash Deposits', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Text(
+                                'Cash Deposits',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               const SizedBox(height: 6),
-                              Text('Customers: ${list.length}', style: const TextStyle(color: Colors.black54)),
+                              Text(
+                                'Customers: ${list.length}',
+                                style: const TextStyle(color: Colors.black54),
+                              ),
                             ],
                           ),
                           ElevatedButton.icon(
-                            onPressed: () => Get.to(() => const AddDepositPage()),
+                            onPressed: () =>
+                                Get.to(() => const AddDepositPage()),
                             icon: const Icon(Icons.add),
                             label: const Text('New Account'),
                           ),
@@ -127,8 +139,14 @@ class _CashDepositsPageState extends State<CashDepositsPage> {
                   if (list.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[300]!)),
-                      child: const Center(child: Text('No deposit accounts found')),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: const Center(
+                        child: Text('No deposit accounts found'),
+                      ),
                     )
                   else
                     ListView.separated(
@@ -168,17 +186,33 @@ class _CashDepositsPageState extends State<CashDepositsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(d.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text(
+                    d.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.currency_rupee, size: 16, color: Colors.grey[700]),
+                      Icon(
+                        Icons.currency_rupee,
+                        size: 16,
+                        color: Colors.grey[700],
+                      ),
                       const SizedBox(width: 4),
-                      Text('NPR ${d.currentBalance.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        'NPR ${d.currentBalance.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(width: 12),
                       const Text('•'),
                       const SizedBox(width: 12),
-                      Text('Rate: ${d.interestRate}%', style: const TextStyle(color: Colors.black54)),
+                      Text(
+                        'Rate: ${d.interestRate}%',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -186,16 +220,68 @@ class _CashDepositsPageState extends State<CashDepositsPage> {
                     children: [
                       const Icon(Icons.event, size: 14, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text('Latest: ${d.latestTransactionDateNepali}', style: const TextStyle(color: Colors.black54)),
+                      Text(
+                        'Latest: ${d.latestTransactionDateNepali}',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            ElevatedButton(
-              onPressed: () => Get.to(() => DepositDetailPage(depositId: d.depositId)),
-              child: const Text('Statement'),
+            const SizedBox(width: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton(
+                  onPressed: () =>
+                      Get.to(() => DepositDetailPage(depositId: d.depositId)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[50],
+                    foregroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  child: const Text('View'),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () async {
+                    final shouldDelete = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Delete Deposit Account'),
+                        content: Text(
+                          'Are you sure you want to delete the deposit account for ${d.name}? This action cannot be undone.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (shouldDelete == true) {
+                      await controller.deleteDeposit(d.depositId);
+                    }
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -260,10 +346,20 @@ class _AddDepositPageState extends State<AddDepositPage> {
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(Icons.person, color: Colors.blue[700], size: 18),
+                      child: Icon(
+                        Icons.person,
+                        color: Colors.blue[700],
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Text('Customer Information', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700])),
+                    Text(
+                      'Customer Information',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[700],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -273,9 +369,12 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Customer Name',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -284,9 +383,12 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Address',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -295,9 +397,12 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Phone Number',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -306,7 +411,9 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Description (optional)',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
 
@@ -323,10 +430,20 @@ class _AddDepositPageState extends State<AddDepositPage> {
                         color: Colors.green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(Icons.account_balance, color: Colors.green[700], size: 18),
+                      child: Icon(
+                        Icons.account_balance,
+                        color: Colors.green[700],
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Text('Deposit Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[700])),
+                    Text(
+                      'Deposit Details',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[700],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -336,7 +453,9 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Initial Deposit Amount (NPR)',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (v) {
@@ -353,7 +472,9 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   labelText: 'Interest Rate (Yearly, display only) %',
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (v) {
@@ -372,10 +493,13 @@ class _AddDepositPageState extends State<AddDepositPage> {
                   filled: true,
                   fillColor: Colors.grey[50],
                   suffixIcon: const Icon(Icons.event),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onTap: _pickNepaliDate,
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               Align(
@@ -403,7 +527,11 @@ class _AddDepositPageState extends State<AddDepositPage> {
       helpText: 'Select Nepali Date',
     );
     if (selected != null) {
-      final nd = NepaliDate(year: selected.year, month: selected.month, day: selected.day);
+      final nd = NepaliDate(
+        year: selected.year,
+        month: selected.month,
+        day: selected.day,
+      );
       setState(() => dateCtrl.text = nd.format());
     }
   }
@@ -441,7 +569,10 @@ class DepositDetailPage extends StatelessWidget {
     final controller = Get.find<DepositController>();
     final model = controller.getById(depositId);
     if (model == null) {
-      return Scaffold(appBar: AppBar(title: const Text('Deposit Statement')), body: const Center(child: Text('Account not found')));
+      return Scaffold(
+        appBar: AppBar(title: const Text('Deposit Statement')),
+        body: const Center(child: Text('Account not found')),
+      );
     }
 
     return Scaffold(
@@ -454,7 +585,7 @@ class DepositDetailPage extends StatelessWidget {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'Download PDF',
             onPressed: () => controller.exportCustomerDepositToPDF(depositId),
-          )
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -474,16 +605,25 @@ class DepositDetailPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: t.type == 'Deposit' ? Colors.green[50] : Colors.red[50],
+                      color: t.type == 'Deposit'
+                          ? Colors.green[50]
+                          : Colors.red[50],
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: t.type == 'Deposit' ? Colors.green : Colors.red),
+                      border: Border.all(
+                        color: t.type == 'Deposit' ? Colors.green : Colors.red,
+                      ),
                     ),
                     child: Text(
                       t.type,
                       style: TextStyle(
-                        color: t.type == 'Deposit' ? Colors.green[800] : Colors.red[800],
+                        color: t.type == 'Deposit'
+                            ? Colors.green[800]
+                            : Colors.red[800],
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -504,12 +644,19 @@ class DepositDetailPage extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.event, size: 16, color: Colors.grey),
+                            const Icon(
+                              Icons.event,
+                              size: 16,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(width: 4),
                             Text(t.dateNepali),
                           ],
                         ),
-                        Text('Bal: NPR ${t.balanceAfter.toStringAsFixed(2)}', style: const TextStyle(color: Colors.black87)),
+                        Text(
+                          'Bal: NPR ${t.balanceAfter.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.black87),
+                        ),
                       ],
                     ),
                     if (t.description != null && t.description!.isNotEmpty)
@@ -528,7 +675,11 @@ class DepositDetailPage extends StatelessWidget {
     );
   }
 
-  void _showAddTransactionDialog(BuildContext context, DepositController controller, DepositModel model) {
+  void _showAddTransactionDialog(
+    BuildContext context,
+    DepositController controller,
+    DepositModel model,
+  ) {
     final type = ValueNotifier<String>('Deposit');
     final amountCtrl = TextEditingController();
     final dateCtrl = TextEditingController();
@@ -548,8 +699,14 @@ class DepositDetailPage extends StatelessWidget {
                   builder: (context, v, _) => DropdownButtonFormField<String>(
                     value: v,
                     items: const [
-                      DropdownMenuItem(value: 'Deposit', child: Text('Deposit')),
-                      DropdownMenuItem(value: 'Withdrawal', child: Text('Withdrawal')),
+                      DropdownMenuItem(
+                        value: 'Deposit',
+                        child: Text('Deposit'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Withdrawal',
+                        child: Text('Withdrawal'),
+                      ),
                     ],
                     onChanged: (x) => type.value = x ?? 'Deposit',
                     decoration: const InputDecoration(labelText: 'Type'),
@@ -568,11 +725,17 @@ class DepositDetailPage extends StatelessWidget {
                     filled: true,
                     fillColor: Colors.grey[50],
                     suffixIcon: const Icon(Icons.event),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onTap: () async {
                     final today = NepaliDate.today();
-                    final initial = picker.NepaliDateTime(today.year, today.month, today.day);
+                    final initial = picker.NepaliDateTime(
+                      today.year,
+                      today.month,
+                      today.day,
+                    );
                     final selected = await picker.showMaterialDatePicker(
                       context: context,
                       initialDate: initial,
@@ -581,20 +744,29 @@ class DepositDetailPage extends StatelessWidget {
                       helpText: 'Select Nepali Date',
                     );
                     if (selected != null) {
-                      final nd = NepaliDate(year: selected.year, month: selected.month, day: selected.day);
+                      final nd = NepaliDate(
+                        year: selected.year,
+                        month: selected.month,
+                        day: selected.day,
+                      );
                       dateCtrl.text = nd.format();
                     }
                   },
                 ),
                 TextField(
                   controller: descCtrl,
-                  decoration: const InputDecoration(labelText: 'Description (optional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 final amt = double.tryParse(amountCtrl.text.trim());
@@ -605,12 +777,14 @@ class DepositDetailPage extends StatelessWidget {
                   type: type.value,
                   amount: amt,
                   nepaliDate: dateStr,
-                  description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                  description: descCtrl.text.trim().isEmpty
+                      ? null
+                      : descCtrl.text.trim(),
                 );
                 Navigator.pop(context);
               },
               child: const Text('Add'),
-            )
+            ),
           ],
         );
       },

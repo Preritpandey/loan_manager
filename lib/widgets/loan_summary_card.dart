@@ -11,7 +11,11 @@ class LoanSummaryCard extends StatelessWidget {
   final double totalInterestDue;
   final VoidCallback? onOverdueTap;
 
-  const LoanSummaryCard({
+  // Add a unique key for this widget to help with updates
+  final String refreshKey =
+      'loan_summary_${DateTime.now().millisecondsSinceEpoch}';
+
+  LoanSummaryCard({
     super.key,
     required this.padding,
     required this.isDesktop,

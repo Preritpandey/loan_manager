@@ -632,6 +632,18 @@ class DepositController extends GetxController {
     }
   }
 
+  Future<void> deleteDeposit(String depositId) async {
+    try {
+      final deposit = deposits.firstWhere((d) => d.depositId == depositId);
+      await deposit.delete();
+      deposits.removeWhere((d) => d.depositId == depositId);
+      filtered.value = List<DepositModel>.from(deposits);
+      _snack('Success', 'Deposit account deleted');
+    } catch (e) {
+      _snack('Error', 'Failed to delete deposit account');
+    }
+  }
+
   void _snack(String title, String message) {
     try {
       if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();

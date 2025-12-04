@@ -355,7 +355,10 @@ class LoanDetailOperationsController extends GetxController {
     }
   }
 
-  Future<bool> addPrincipalOnlyPayment(double principalAmount, DateTime repaymentDate) async {
+  Future<bool> addPrincipalOnlyPayment(
+    double principalAmount,
+    DateTime repaymentDate,
+  ) async {
     if (isProcessingAction.value) return false;
 
     if (principalAmount <= 0) {
@@ -564,15 +567,16 @@ class LoanDetailOperationsController extends GetxController {
       _showErrorSnackbar('Payment amount must be positive');
       return false;
     }
-    
+
     // For overdue loans, use forSettlement: false to allow collection of full overdue amount
     // For non-overdue loans, use forSettlement: true to enforce 30-day minimum interest
     final isOverdue = _loan.isOverdue;
     final outstanding = _loan.outstandingDueAt(
-      paymentDate, 
-      forSettlement: !isOverdue, // false for overdue loans, true for non-overdue
+      paymentDate,
+      forSettlement:
+          !isOverdue, // false for overdue loans, true for non-overdue
     );
-    
+
     if (amount - outstanding > 0.005) {
       _showErrorSnackbar(
         'Amount exceeds outstanding due (NPR ${outstanding.toStringAsFixed(2)})',
