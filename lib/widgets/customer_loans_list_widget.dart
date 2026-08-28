@@ -7,11 +7,13 @@ import 'package:list/pages/loan_detail_page.dart';
 class CustomerLoansListWidget extends StatelessWidget {
   final String customerName;
   final List<Loan> customerLoans;
+  final String emptyMessage;
 
   const CustomerLoansListWidget({
     super.key,
     required this.customerName,
     required this.customerLoans,
+    this.emptyMessage = 'No loans found',
   });
 
   @override
@@ -77,16 +79,40 @@ class CustomerLoansListWidget extends StatelessWidget {
             ),
 
             // Loans List
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              itemCount: customerLoans.length,
-              itemBuilder: (context, index) {
-                final loan = customerLoans[index];
-                return _buildLoanTile(loan, index);
-              },
-            ),
+            if (customerLoans.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.receipt_long,
+                      size: 40,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: customerLoans.length,
+                itemBuilder: (context, index) {
+                  final loan = customerLoans[index];
+                  return _buildLoanTile(loan, index);
+                },
+              ),
           ],
         ),
       ),

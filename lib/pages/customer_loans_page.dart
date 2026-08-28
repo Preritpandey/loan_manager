@@ -5,6 +5,8 @@ import 'package:list/models/loan.dart';
 import 'package:list/widgets/customer_loans_list_widget.dart';
 import 'package:list/widgets/search_results_indicator_widget.dart';
 
+enum _CustomerLoanSection { active, paid }
+
 class CustomerLoansPage extends StatefulWidget {
   final String customerName;
   final List<Loan> customerLoans;
@@ -24,6 +26,7 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
+  _CustomerLoanSection _selectedSection = _CustomerLoanSection.active;
 
   @override
   void initState() {
@@ -38,15 +41,30 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
     super.dispose();
   }
 
-  List<Loan> _getFilteredLoans() {
+  List<Loan> _getCurrentCustomerLoans() {
+    return controller.getLoansByCustomerName(widget.customerName);
+  }
+
+  List<Loan> _getSearchFilteredLoans(List<Loan> loans) {
     final q = _searchQuery.trim().toLowerCase();
-    if (q.isEmpty) return widget.customerLoans;
-    return widget.customerLoans.where((loan) {
+    if (q.isEmpty) return loans;
+    return loans.where((loan) {
       final serial = loan.serialNumber.toLowerCase();
       final jewellery = loan.jewelleryName.toLowerCase();
       return serial.contains(q) || jewellery.contains(q);
     }).toList();
   }
+
+  List<Loan> _getSectionLoans(List<Loan> loans) {
+    if (_selectedSection == _CustomerLoanSection.active) {
+      return loans.where(_isActiveLoan).toList();
+    }
+    return loans.where(_isPaidLoan).toList();
+  }
+
+  bool _isActiveLoan(Loan loan) => loan.dueAmount > 0;
+
+  bool _isPaidLoan(Loan loan) => loan.dueAmount == 0;
 
   @override
   Widget build(BuildContext context) {
@@ -64,12 +82,17 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
               widget.customerName,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            Text(
-              '${widget.customerLoans.length} loan${widget.customerLoans.length > 1 ? 's' : ''}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-              ),
+            Obx(
+              () {
+                final loanCount = _getCurrentCustomerLoans().length;
+                return Text(
+                  '$loanCount loan${loanCount > 1 ? 's' : ''}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -94,119 +117,137 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
       body: Center(
         child: Container(
           width: maxWidth,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Customer Summary Card
-                _buildCustomerSummaryCard(),
-                const SizedBox(height: 16),
+          child: Obx(
+            () {
+              controller.loans.length;
+              final allCustomerLoans = _getCurrentCustomerLoans();
+              final searchedLoans = _getSearchFilteredLoans(allCustomerLoans);
+              final activeCount = searchedLoans.where(_isActiveLoan).length;
+              final paidCount = searchedLoans.where(_isPaidLoan).length;
+              final sectionLoans = _getSectionLoans(searchedLoans);
 
-                // Search Bar for this customer's loans
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        colors: [Colors.white, Colors.grey[50]!],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                      onSubmitted: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: isDesktop
-                            ? 'Search by serial number or jewellery name'
-                            : 'Serial number or jewellery name',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        prefixIcon: Container(
-                          margin: const EdgeInsets.all(8),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[100],
-                            borderRadius: BorderRadius.circular(8),
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Customer Summary Card
+                    _buildCustomerSummaryCard(allCustomerLoans),
+                    const SizedBox(height: 16),
+
+                    // Search Bar for this customer's loans
+                    Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            colors: [Colors.white, Colors.grey[50]!],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          child: Icon(Icons.search,
-                              color: Colors.blue[700], size: 20),
                         ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {
-                                    _searchQuery = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                          },
+                          onSubmitted: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                          },
+                          decoration: InputDecoration(
+                            hintText: isDesktop
+                                ? 'Search by serial number or jewellery name'
+                                : 'Serial number or jewellery name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(Icons.search,
+                                  color: Colors.blue[700], size: 20),
+                            ),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {
+                                        _searchQuery = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-                if (_searchQuery.isNotEmpty)
-                  SearchResultsIndicatorWidget(
-                    resultCount: _getFilteredLoans().length,
-                    padding:
-                        EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-                    isDesktop: isDesktop,
-                    onClear: () {
-                      _searchController.clear();
-                      setState(() {
-                        _searchQuery = '';
-                      });
-                    },
-                  ),
+                    if (_searchQuery.isNotEmpty)
+                      SearchResultsIndicatorWidget(
+                        resultCount: sectionLoans.length,
+                        padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                        isDesktop: isDesktop,
+                        onClear: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      ),
 
-                // Individual Loans List
-                CustomerLoansListWidget(
-                  customerName: widget.customerName,
-                  customerLoans: _getFilteredLoans(),
+                    _buildLoanSectionToggle(activeCount, paidCount),
+                    const SizedBox(height: 12),
+
+                    // Individual Loans List
+                    CustomerLoansListWidget(
+                      customerName: widget.customerName,
+                      customerLoans: sectionLoans,
+                      emptyMessage:
+                          _selectedSection == _CustomerLoanSection.active
+                          ? 'No active loans for this customer'
+                          : 'No paid loans for this customer',
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCustomerSummaryCard() {
-    final totalDueAmount = controller.getTotalDueAmountForCustomer(
-      widget.customerName,
+  Widget _buildCustomerSummaryCard(List<Loan> customerLoans) {
+    final totalDueAmount = customerLoans.fold(
+      0.0,
+      (sum, loan) => sum + loan.dueAmount,
     );
-    final totalAmountGiven = widget.customerLoans.fold(
+    final totalAmountGiven = customerLoans.fold(
       0.0,
       (sum, loan) => sum + loan.amountGiven,
     );
-    final totalAmountReceived = widget.customerLoans.fold(
+    final totalAmountReceived = customerLoans.fold(
       0.0,
       (sum, loan) => sum + loan.amountReceived,
     );
@@ -349,36 +390,128 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
               ],
 
               // Customer Info
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.phone, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Phone: ${widget.customerLoans.first.phone}',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                    ),
-                    const SizedBox(width: 16),
-                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Address: ${widget.customerLoans.first.address}',
+              if (customerLoans.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.phone, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Phone: ${customerLoans.first.phone}',
                         style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 16),
+                      Icon(
+                        Icons.location_on,
+                        size: 16,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Address: ${customerLoans.first.address}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[700],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoanSectionToggle(int activeCount, int paidCount) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildSectionButton(
+                section: _CustomerLoanSection.active,
+                label: 'Active Loans',
+                count: activeCount,
+                icon: Icons.account_balance_wallet,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _buildSectionButton(
+                section: _CustomerLoanSection.paid,
+                label: 'Paid Loans',
+                count: paidCount,
+                icon: Icons.check_circle,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionButton({
+    required _CustomerLoanSection section,
+    required String label,
+    required int count,
+    required IconData icon,
+  }) {
+    final selected = _selectedSection == section;
+    final color = section == _CustomerLoanSection.active
+        ? Colors.blue[700]!
+        : Colors.green[700]!;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        setState(() {
+          _selectedSection = section;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? color : Colors.grey[300]!),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? Colors.white : color,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '$label ($count)',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -430,7 +563,13 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
 
   void _addNewLoanForCustomer() {
     // Navigate to add loan page with pre-filled customer information
-    final existingLoan = widget.customerLoans.first;
+    final customerLoans = _getCurrentCustomerLoans();
+    final existingLoans = customerLoans.isEmpty
+        ? widget.customerLoans
+        : customerLoans;
+    if (existingLoans.isEmpty) return;
+
+    final existingLoan = existingLoans.first;
 
     final arguments = {
       'customerName': widget.customerName,
