@@ -23,8 +23,16 @@ class CustomerTile extends StatelessWidget {
     // Use remainingPrincipal instead of amountGiven to reflect the actual outstanding principal
     final totalGiven = customerLoans.fold(
       0.0,
-      (sum, loan) => sum + loan.remainingPrincipal,
+      (sum, loan) => sum + loan.amountGiven,
     );
+
+    /**
+       final totalAmountGiven = customerLoans.fold(
+      0.0,
+      (sum, loan) => sum + loan.amountGiven,
+    );
+     */
+
     final totalDue = customerLoans.fold(
       0.0,
       (sum, loan) => sum + loan.dueAmount,
