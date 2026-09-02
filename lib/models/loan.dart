@@ -140,6 +140,49 @@ class Loan extends HiveObject {
     return interestRate / 365.25;
   }
 
+  double _interestForDays(double principal, int days) {
+    if (days <= 0 || principal <= 0) return 0.0;
+
+    // A completed 365-day loan year earns the configured annual rate exactly.
+    // Shorter spans still use the app's existing daily-rate calculation.
+    if (days == 365) {
+      return principal * interestRate / 100;
+    }
+
+    return (principal * dailyInterestRate * days) / 100;
+  }
+
+  double _outstandingDueNoEvents(DateTime asOf, {bool forSettlement = false}) {
+    final totalDays = asOf.difference(date).inDays + 1;
+    if (totalDays <= 0) return amountGiven;
+
+    final isOverdueAtDate = totalDays > duration;
+    final firstPhaseDays = totalDays <= duration ? totalDays : duration;
+    final appliedFirstPhaseDays =
+        (firstPhaseDays < 30 && forSettlement && !isOverdueAtDate)
+        ? 30
+        : firstPhaseDays;
+
+    var currentDue =
+        amountGiven + _interestForDays(amountGiven, appliedFirstPhaseDays);
+
+    if (!isOverdueAtDate) {
+      return currentDue;
+    }
+
+    var remainingOverdueDays = totalDays - duration;
+    while (remainingOverdueDays >= 365) {
+      currentDue += _interestForDays(currentDue, 365);
+      remainingOverdueDays -= 365;
+    }
+
+    if (remainingOverdueDays > 0) {
+      currentDue += _interestForDays(currentDue, remainingOverdueDays);
+    }
+
+    return currentDue;
+  }
+
   // Calculate interest (uses agreed period for total due calculations)
   double get calculatedInterest {
     // For most calculations, we want the agreed period interest
@@ -253,48 +296,10 @@ class Loan extends HiveObject {
   // For overdue loans, applies compound interest after the due date.
   double get currentCalculatedInterest {
     final asOf = DateTime.now();
-    final totalDays = asOf.difference(date).inDays;
 
     // If no partial repayments/top-ups, apply capitalization-at-due-date rule
     if (partialRepayments.isEmpty) {
-      final firstPhaseDays = totalDays <= duration ? totalDays : duration;
-      final overdueDays = totalDays > duration ? (totalDays - duration) : 0;
-
-      // Calculate daily interest rate from annual rate
-      final dailyRate = interestRate / 365.25;
-
-      // For non-overdue period (before due date)
-      double firstPhaseInterest = 0.0;
-      if (firstPhaseDays > 0) {
-        // Calculate interest for the initial period up to due date
-        firstPhaseInterest = (amountGiven * dailyRate * firstPhaseDays) / 100;
-      }
-
-      // If not overdue, return just the first phase interest (with minimum 30 days if applicable)
-      if (overdueDays <= 0) {
-        // Apply minimum 30 days interest if settling early
-        if (firstPhaseDays < 30) {
-          final minInterest = (amountGiven * dailyRate * 30) / 100;
-          return minInterest > firstPhaseInterest
-              ? minInterest
-              : firstPhaseInterest;
-        }
-        return firstPhaseInterest;
-      }
-
-      // For overdue period (after due date) - Apply compounding
-      // Calculate interest for the initial period (up to due date)
-      final firstPhaseInterestToDue =
-          (amountGiven * dailyRate * duration) / 100;
-
-      // Calculate new principal at due date (original principal + interest up to due date)
-      final principalAtDue = amountGiven + firstPhaseInterestToDue;
-
-      // Calculate interest for the overdue period on the new principal
-      final overdueInterest = (principalAtDue * dailyRate * overdueDays) / 100;
-
-      // Return total interest (initial period + overdue period with compounding)
-      return firstPhaseInterestToDue + overdueInterest;
+      return _outstandingDueNoEvents(asOf, forSettlement: true) - amountGiven;
     }
 
     // For loans with partial repayments, use the ledger
@@ -358,6 +363,10 @@ class Loan extends HiveObject {
   // enforcing minimum 30 days if within first 30 days and treated as settlement.
   double get compoundInterest {
     final asOf = DateTime.now();
+    if (partialRepayments.isEmpty) {
+      return _outstandingDueNoEvents(asOf, forSettlement: true) - amountGiven;
+    }
+
     final s = _ledgerUpTo(asOf);
     double accrued = s['accrued'] ?? 0.0;
     final interestPaid =
@@ -612,28 +621,7 @@ class Loan extends HiveObject {
 
     // If no partial repayments/top-ups, apply capitalization-at-due-date rule
     if (partialRepayments.isEmpty) {
-      final firstPhaseDays = totalDays <= duration ? totalDays : duration;
-      final overdueDays = totalDays > duration ? (totalDays - duration) : 0;
-
-      // For overdue loans, don't enforce the 30-day minimum interest rule
-      final appliedFirstPhaseDays =
-          (firstPhaseDays < 30 && forSettlement && !isOverdue)
-          ? 30
-          : firstPhaseDays;
-
-      // Calculate first phase interest (up to due date or end of loan)
-      final i1 =
-          (amountGiven * dailyInterestRate * appliedFirstPhaseDays) / 100;
-
-      if (!isOverdue) {
-        return amountGiven + i1;
-      }
-
-      // For overdue loans, calculate with compound interest after due date
-      final principalAtDue =
-          amountGiven + (amountGiven * dailyInterestRate * duration) / 100;
-      final i2 = (principalAtDue * dailyInterestRate * overdueDays) / 100;
-      return amountGiven + i1 + i2;
+      return _outstandingDueNoEvents(asOf, forSettlement: forSettlement);
     }
 
     // For loans with partial repayments, use the ledger

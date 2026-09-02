@@ -146,6 +146,39 @@ void main() {
       expect(loan15Percent.calculatedInterest, closeTo(1500.0, 0.01));
     });
 
+    test('Overdue yearly interest compounds on previous due amount', () {
+      final loan = Loan(
+        name: 'Test Customer',
+        date: DateTime(2024, 1, 1),
+        duration: 365,
+        interestRate: 30.0,
+        type: 'Gold',
+        jewelleryName: 'Gold Chain',
+        serialNumber: 'TEST_OVERDUE_YEARLY',
+        phone: '1234567890',
+        address: 'Test Address',
+        description: 'Test Description',
+        amountGiven: 100000.0,
+      );
+
+      DateTime asOfCompletedYears(int years) {
+        return loan.date.add(Duration(days: (365 * years) - 1));
+      }
+
+      expect(
+        loan.outstandingDueAt(asOfCompletedYears(2), forSettlement: false),
+        closeTo(169000.0, 0.01),
+      );
+      expect(
+        loan.outstandingDueAt(asOfCompletedYears(3), forSettlement: false),
+        closeTo(219700.0, 0.01),
+      );
+      expect(
+        loan.outstandingDueAt(asOfCompletedYears(4), forSettlement: false),
+        closeTo(285610.0, 0.01),
+      );
+    });
+
     test('Partial repayment with annual interest rate', () {
       // Test partial repayment with annual interest rate
       final loan = Loan(
