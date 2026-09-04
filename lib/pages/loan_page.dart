@@ -13,6 +13,7 @@ import 'package:list/widgets/loading_state_widget.dart';
 import 'package:list/widgets/empty_state_widget.dart';
 import 'package:list/widgets/no_results_widget.dart';
 import 'package:list/widgets/floating_action_buttons_widget.dart';
+import 'package:list/widgets/customer_loan_tabs.dart';
 import 'package:list/controllers/bank_loan_controller.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 
@@ -33,6 +34,7 @@ class _LoanHomePageState extends State<LoanHomePage>
   late Animation<double> _fadeAnimation;
   bool _showSuggestions = false;
   bool _didAskBackupIdentity = false;
+  CustomerLoanTab _selectedCustomerLoanTab = CustomerLoanTab.individual;
 
   @override
   void initState() {
@@ -52,7 +54,9 @@ class _LoanHomePageState extends State<LoanHomePage>
 
     // Initialize BankLoanController
     Get.put(BankLoanController());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _askForBackupIdentity());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _askForBackupIdentity(),
+    );
   }
 
   Future<void> _askForBackupIdentity() async {
@@ -199,7 +203,40 @@ class _LoanHomePageState extends State<LoanHomePage>
 
                       final groupedLoans = controller
                           .getLoansGroupedByCustomer();
-                      final customerNames = groupedLoans.keys.toList();
+                      final overdueGroupedLoans = controller
+                          .getOverdueLoans()
+                          .fold<Map<String, List<Loan>>>({}, (map, loan) {
+                            map.putIfAbsent(loan.name, () => []).add(loan);
+                            return map;
+                          });
+                      Map<String, List<Loan>> loansForTab(
+                        bool hasFiveOrMoreLoans,
+                      ) {
+                        final entries = groupedLoans.entries.where(
+                          (entry) =>
+                              (entry.value.length >= 5) == hasFiveOrMoreLoans,
+                        );
+                        return Map<String, List<Loan>>.fromEntries(
+                          entries
+                              .map(
+                                (entry) => MapEntry(
+                                  entry.key,
+                                  _showOverdueOnly.value
+                                      ? overdueGroupedLoans[entry.key] ?? []
+                                      : entry.value,
+                                ),
+                              )
+                              .where((entry) => entry.value.isNotEmpty),
+                        );
+                      }
+
+                      final individualLoans = loansForTab(false);
+                      final customerLoans = loansForTab(true);
+                      final selectedGroupedLoans =
+                          _selectedCustomerLoanTab == CustomerLoanTab.individual
+                          ? individualLoans
+                          : customerLoans;
+                      final customerNames = selectedGroupedLoans.keys.toList();
 
                       // Show empty state only if there are no loans at all
                       if (customerNames.isEmpty && controller.loans.isEmpty) {
@@ -321,6 +358,17 @@ class _LoanHomePageState extends State<LoanHomePage>
                               },
                             ),
 
+                            CustomerLoanTabs(
+                              selectedTab: _selectedCustomerLoanTab,
+                              individualCount: individualLoans.length,
+                              customerCount: customerLoans.length,
+                              onTabChanged: (tab) {
+                                setState(() {
+                                  _selectedCustomerLoanTab = tab;
+                                });
+                              },
+                            ),
+
                             // Cash Deposits section
                             Padding(
                               padding: padding,
@@ -389,32 +437,14 @@ class _LoanHomePageState extends State<LoanHomePage>
 
                             // Loans List
                             LoansListWidget(
-                              customerNames: _showOverdueOnly.value
-                                  ? controller
-                                        .getOverdueLoans()
-                                        .map((loan) => loan.name)
-                                        .toSet()
-                                        .toList()
-                                  : customerNames,
-                              groupedLoans: _showOverdueOnly.value
-                                  ? controller
-                                        .getOverdueLoans()
-                                        .fold<Map<String, List<Loan>>>({}, (
-                                          map,
-                                          loan,
-                                        ) {
-                                          map[loan.name] = controller
-                                              .getOverdueLoans()
-                                              .where((l) => l.name == loan.name)
-                                              .toList();
-                                          return map;
-                                        })
-                                  : groupedLoans,
+                              customerNames: customerNames,
+                              groupedLoans: selectedGroupedLoans,
                               padding: padding,
                               isDesktop: isDesktop,
-                              totalLoansCount: _showOverdueOnly.value
-                                  ? controller.getOverdueLoansCount()
-                                  : controller.getTotalLoansCount(),
+                              totalLoansCount: selectedGroupedLoans.values.fold(
+                                0,
+                                (total, loans) => total + loans.length,
+                              ),
                             ),
 
                             // Bottom padding for FAB
