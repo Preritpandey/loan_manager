@@ -4,6 +4,7 @@ import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:list/pages/loan_detail_page.dart';
+import 'package:list/utils/loan_serial_number_generator.dart';
 
 class AddLoanFormController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
@@ -15,13 +16,28 @@ class AddLoanFormController extends GetxController {
   final selectedNepaliDate = NepaliDate.today().obs;
   final useCustomDate = false.obs;
   bool isAddingForExistingCustomer = false;
+  String _lastGeneratedSerial = '';
 
   void updateFormData(String key, dynamic value) {
     formData[key] = value;
 
     if (key == 'name' && value != null && value.toString().isNotEmpty) {
+      _updateDefaultSerialNumber(value.toString());
       _checkForLoanReissue(value.toString());
     }
+  }
+
+  void _updateDefaultSerialNumber(String customerName) {
+    final currentSerial = formData['serialNumber']?.toString() ?? '';
+    if (currentSerial.isNotEmpty && currentSerial != _lastGeneratedSerial) {
+      return;
+    }
+    final generated = LoanSerialNumberGenerator.generate(
+      customerName: customerName,
+      existingLoans: _loanController.loans,
+    );
+    _lastGeneratedSerial = generated;
+    formData['serialNumber'] = generated;
   }
 
   void preFillFromArguments(Map<String, dynamic> arguments) {
@@ -30,7 +46,7 @@ class AddLoanFormController extends GetxController {
     formData['name'] = arguments['customerName'];
     formData['phone'] = arguments['phone'];
     formData['address'] = arguments['address'];
-    formData['serialNumber'] = arguments['serialNumber'];
+    _updateDefaultSerialNumber(arguments['customerName']?.toString() ?? '');
 
     // Don't show reissue info since we're adding for existing customer
     showingReissueInfo.value = false;
@@ -48,8 +64,6 @@ class AddLoanFormController extends GetxController {
       formData['address'] = collateralInfo['address'];
       formData['type'] = collateralInfo['type'];
       formData['jewelleryName'] = collateralInfo['jewelleryName'];
-      formData['serialNumber'] = collateralInfo['serialNumber'];
-
       showingReissueInfo.value = false;
       _showSuccessSnackbar('Previous loan information auto-filled');
     }
@@ -134,7 +148,6 @@ class AddLoanFormController extends GetxController {
     bool success = false;
 
     try {
-
       if (!_validateAllRequiredFields()) {
         _showErrorSnackbar('Please fill in all required fields');
         return false;
@@ -216,11 +229,8 @@ class AddLoanFormController extends GetxController {
           (customerName.isEmpty ||
               customerPhone.isEmpty ||
               customerAddress.isEmpty)) {
-      
         return null;
       }
-
-
 
       // Use a default duration of 365 days (1 year) since we're now calculating daily interest
       // The actual interest calculation will be based on actual days passed

@@ -13,12 +13,25 @@ class AddLoanPage extends StatefulWidget {
 
 class _AddLoanPageState extends State<AddLoanPage> {
   late AddLoanFormController controller;
+  late final TextEditingController _serialNumberController;
+  late final Worker _formDataWorker;
   bool isAddingForExistingCustomer = false;
 
   @override
   void initState() {
     super.initState();
     controller = Get.put(AddLoanFormController());
+    _serialNumberController = TextEditingController();
+    _formDataWorker = ever(controller.formData, (_) {
+      final serialNumber =
+          controller.formData['serialNumber']?.toString() ?? '';
+      if (_serialNumberController.text != serialNumber) {
+        _serialNumberController.value = TextEditingValue(
+          text: serialNumber,
+          selection: TextSelection.collapsed(offset: serialNumber.length),
+        );
+      }
+    });
 
     // Check for arguments passed from Customer Loans Page
     final arguments = Get.arguments as Map<String, dynamic>?;
@@ -32,6 +45,13 @@ class _AddLoanPageState extends State<AddLoanPage> {
     } else {
       print('🔧 AddLoanPage: No arguments received - creating new customer');
     }
+  }
+
+  @override
+  void dispose() {
+    _formDataWorker.dispose();
+    _serialNumberController.dispose();
+    super.dispose();
   }
 
   @override
@@ -210,13 +230,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
                           icon: Icons.diamond_outlined,
                         ),
                       ]),
-                      _buildTextField(
-                        'Serial Number',
-                        'serialNumber',
-                        icon: Icons.qr_code_outlined,
-                        enabled:
-                            true, // Always enabled as it represents the collateral
-                      ),
+                      _buildSerialNumberField(),
 
                       const SizedBox(height: 24),
 
@@ -426,6 +440,29 @@ class _AddLoanPageState extends State<AddLoanPage> {
             return controller.validateRequiredField(value, label);
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildSerialNumberField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: _serialNumberController,
+        decoration: InputDecoration(
+          labelText: 'Serial Number',
+          prefixIcon: Icon(Icons.qr_code_outlined, color: Colors.blue[700]),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          filled: true,
+          fillColor: Colors.grey[50],
+        ),
+        onChanged: (value) => controller.updateFormData('serialNumber', value),
+        onSaved: (value) => controller.updateFormData('serialNumber', value),
+        validator: (value) =>
+            controller.validateRequiredField(value, 'Serial Number'),
       ),
     );
   }
