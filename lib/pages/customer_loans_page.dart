@@ -577,13 +577,6 @@ class _CustomerLoansPageState extends State<CustomerLoansPage> {
       'address': existingLoan.address,
       'serialNumber': '', // Leave serial number empty for new collateral
     };
-
-    print('🔧 CustomerLoansPage: Adding new loan for existing customer');
-    print('🔧 Customer Name: ${widget.customerName}');
-    print('🔧 Phone: ${existingLoan.phone}');
-    print('🔧 Address: ${existingLoan.address}');
-    print('🔧 Arguments being passed: $arguments');
-
     Get.toNamed('/add', arguments: arguments);
   }
 

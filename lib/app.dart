@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/otp_verify_controller.dart';
+import 'package:list/controllers/backup_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/pages/add_loan_page.dart';
+import 'package:list/pages/backup_page.dart';
 import 'package:list/pages/loan_page.dart';
 import 'package:list/pages/otp_verification_screen.dart';
 import 'package:list/pages/splash_screen.dart';
@@ -42,6 +44,7 @@ class MyApp extends StatelessWidget {
         GetPage(name: '/otp', page: () => OtpScreen()),
         GetPage(name: '/splash', page: () => SplashScreen()),
         GetPage(name: '/cash-deposits', page: () => const CashDepositsPage()),
+        GetPage(name: '/backup', page: () => const BackupPage()),
         GetPage(
           name: '/loan-details',
           page: () {
@@ -52,6 +55,7 @@ class MyApp extends StatelessWidget {
       ],
       initialBinding: BindingsBuilder(() {
         Get.put(AuthController());
+        Get.put(BackupController());
       }),
     );
   }

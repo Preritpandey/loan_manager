@@ -34,14 +34,6 @@ class AddLoanFormController extends GetxController {
 
     // Don't show reissue info since we're adding for existing customer
     showingReissueInfo.value = false;
-
-    print(
-      '🔧 Pre-filling form for existing customer: ${arguments['customerName']}',
-    );
-    print('🔧 Phone: ${arguments['phone']}');
-    print('🔧 Address: ${arguments['address']}');
-    print('🔧 Serial Number: ${arguments['serialNumber']}');
-    print('🔧 isAddingForExistingCustomer: $isAddingForExistingCustomer');
   }
 
   void _checkForLoanReissue(String customerName) {
@@ -142,9 +134,6 @@ class AddLoanFormController extends GetxController {
     bool success = false;
 
     try {
-      print('🔧 Submitting form...');
-      print('🔧 isAddingForExistingCustomer: $isAddingForExistingCustomer');
-      print('🔧 Form data: $formData');
 
       if (!_validateAllRequiredFields()) {
         _showErrorSnackbar('Please fill in all required fields');
@@ -156,10 +145,6 @@ class AddLoanFormController extends GetxController {
         _showErrorSnackbar('Invalid data. Please check your inputs.');
         return false;
       }
-
-      print('🔧 Created loan for customer: ${loan.name}');
-      print('🔧 Serial Number: ${loan.serialNumber}');
-      print('🔧 Jewellery: ${loan.jewelleryName}');
 
       _loanController.addLoan(loan);
       success = true; // Set success to true after successful loan addition
@@ -231,23 +216,11 @@ class AddLoanFormController extends GetxController {
           (customerName.isEmpty ||
               customerPhone.isEmpty ||
               customerAddress.isEmpty)) {
-        print('🔧 ERROR: Customer data is missing for existing customer!');
-        print('🔧   Name: "$customerName"');
-        print('🔧   Phone: "$customerPhone"');
-        print('🔧   Address: "$customerAddress"');
-        print('🔧   FormData: $formData');
+      
         return null;
       }
 
-      print('🔧 Creating loan with data:');
-      print('🔧   Name: "$customerName"');
-      print('🔧   Phone: "$customerPhone"');
-      print('🔧   Address: "$customerAddress"');
-      print('🔧   Serial Number: ${formData['serialNumber']}');
-      print('🔧   Jewellery: ${formData['jewelleryName']}');
-      print('🔧   Type: ${formData['type']}');
-      print('🔧   Amount: $amountGiven');
-      print('🔧   Interest Rate: $interestRate');
+
 
       // Use a default duration of 365 days (1 year) since we're now calculating daily interest
       // The actual interest calculation will be based on actual days passed

@@ -361,8 +361,7 @@ class LoanController extends GetxController {
       isSearchActive.value = false;
       hasExplicitSearch.value = false;
 
-      // Print all loans to console for debugging
-      printAllLoans();
+    
 
       // Verify customer grouping
       verifyCustomerGrouping();
@@ -408,9 +407,6 @@ class LoanController extends GetxController {
 
       // Force UI refresh to update grouping
       refreshLoanCalculations();
-
-      // Print all loans to console for debugging
-      printAllLoans();
 
       _showSnackbar('Success', 'Loan added successfully');
       
@@ -1358,89 +1354,6 @@ class LoanController extends GetxController {
     }
   }
 
-  // Method to print raw loan data to console for debugging
-  void printAllLoans() {
-    print('\n=== RAW LOAN DATA FROM HIVE ===');
-    print('Total loans in database: ${loanBox.length}');
-    print('Total loans in memory: ${loans.length}');
-    print('---');
-
-    if (loanBox.isEmpty) {
-      print('No loans found in database.');
-      return;
-    }
-
-    // Print raw data from Hive box
-    for (int i = 0; i < loanBox.length; i++) {
-      final loan = loanBox.getAt(i);
-      if (loan != null) {
-        print('Raw Loan ${i + 1} (Hive Index: $i):');
-        print('  name: "${loan.name}"');
-        print('  phone: "${loan.phone}"');
-        print('  address: "${loan.address}"');
-        print('  serialNumber: "${loan.serialNumber}"');
-        print('  jewelleryName: "${loan.jewelleryName}"');
-        print('  type: "${loan.type}"');
-        print('  amountGiven: ${loan.amountGiven}');
-        print('  amountReceived: ${loan.amountReceived}');
-        print('  interestRate: ${loan.interestRate}');
-        print('  duration: ${loan.duration}');
-        print('  date: ${loan.date}');
-        print('  nepaliDateString: "${loan.nepaliDateString}"');
-        print('  loanId: "${loan.loanId}"');
-        print('  description: "${loan.description}"');
-        print('  partialRepayments: ${loan.partialRepayments.length} items');
-        for (int j = 0; j < loan.partialRepayments.length; j++) {
-          final repayment = loan.partialRepayments[j];
-          print(
-            '    Repayment $j: amount=${repayment.amount}, date=${repayment.date}, daysSinceLoan=${repayment.daysSinceLoan}',
-          );
-        }
-        print('  ---');
-      }
-    }
-
-    print('\n=== CUSTOMER GROUPING ANALYSIS ===');
-    final groupedLoans = getLoansGroupedByCustomer();
-    print('Grouped customers: ${groupedLoans.length}');
-    print('---');
-
-    if (groupedLoans.isEmpty) {
-      print('No customers found after grouping.');
-      return;
-    }
-
-    // Print grouped data in the requested format
-    groupedLoans.forEach((customerName, customerLoans) {
-      print('Customer: "$customerName" (${customerLoans.length} loans)');
-      print('---');
-
-      for (int i = 0; i < customerLoans.length; i++) {
-        final loan = customerLoans[i];
-        print(
-          'Loan ${i + 1} → Serial: "${loan.serialNumber}" | Jewellery: "${loan.jewelleryName}" | Amount: ${loan.amountGiven} | Interest: ${loan.interestRate}%',
-        );
-        print('  Phone: ${loan.phone}');
-        print('  Address: ${loan.address}');
-        print('  Date: ${loan.nepaliDateString}');
-        print('  Due Amount: NPR ${loan.dueAmount.toStringAsFixed(2)}');
-        print('  ---');
-      }
-    });
-
-    print('\n=== GROUPING VERIFICATION ===');
-    print('Total individual loans: ${loans.length}');
-    print('Total grouped customers: ${groupedLoans.length}');
-    int totalLoansInGroups = groupedLoans.values.fold(
-      0,
-      (sum, loanList) => sum + loanList.length,
-    );
-    print('Total loans in groups: $totalLoansInGroups');
-    print(
-      'Grouping successful: ${loans.length == totalLoansInGroups ? "✅ YES" : "❌ NO"}',
-    );
-    print('========================\n');
-  }
 
   // Method to verify and fix customer grouping issues
   void verifyCustomerGrouping() {

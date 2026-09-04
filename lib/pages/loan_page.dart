@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
+import 'package:list/controllers/backup_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/loan_app_bar.dart';
 import 'package:list/widgets/search_bar_widget.dart';
@@ -13,7 +14,6 @@ import 'package:list/widgets/empty_state_widget.dart';
 import 'package:list/widgets/no_results_widget.dart';
 import 'package:list/widgets/floating_action_buttons_widget.dart';
 import 'package:list/controllers/bank_loan_controller.dart';
-import 'package:list/pages/bank_loans_page.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 
 class LoanHomePage extends StatefulWidget {
@@ -32,6 +32,7 @@ class _LoanHomePageState extends State<LoanHomePage>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _showSuggestions = false;
+  bool _didAskBackupIdentity = false;
 
   @override
   void initState() {
@@ -51,6 +52,22 @@ class _LoanHomePageState extends State<LoanHomePage>
 
     // Initialize BankLoanController
     Get.put(BankLoanController());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askForBackupIdentity());
+  }
+
+  Future<void> _askForBackupIdentity() async {
+    if (_didAskBackupIdentity) {
+      return;
+    }
+    _didAskBackupIdentity = true;
+    final backupController = Get.find<BackupController>();
+    while (!backupController.isInitialized.value && mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted || backupController.hasIdentity.value) {
+      return;
+    }
+    await showBackupIdentityDialog(context, backupController);
   }
 
   @override

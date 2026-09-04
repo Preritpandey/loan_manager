@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local rclone credentials and backup snapshots
+rclone.conf
+*.rclone.conf
+.rclone/
+backup_config.local.json
+loan_ledger_backup_*/
