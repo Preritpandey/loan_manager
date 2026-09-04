@@ -447,6 +447,28 @@ class _StatementSectionState extends State<_StatementSection> {
 
     // Note: Removed additional loans from statement as they should not appear
     // in individual loan statements - they are separate loans
+    for (final storedChange in loan.interestRateChanges) {
+      final change = loan.rateChangeDisplaySummary(storedChange);
+      final adjustmentLabel = change.isIncrease
+          ? 'Additional Interest'
+          : 'Interest Discount';
+      events.add(
+        _StatementEvent(
+          date: change.effectiveDate,
+          type: _EventType.rateChange,
+          amount: change.adjustmentAmount.abs(),
+          previousRate: change.previousRate,
+          newRate: change.newRate,
+          previousDue: change.previousCalculatedDue,
+          recalculatedDue: change.recalculatedDue,
+          note:
+              'Affected periods: ${loan.rateChangeAffectedPeriodsLabel(change)} | '
+              'Previous Due NPR ${change.previousCalculatedDue.toStringAsFixed(2)} | '
+              'Recalculated Due NPR ${change.recalculatedDue.toStringAsFixed(2)} | '
+              '$adjustmentLabel NPR ${change.adjustmentAmount.abs().toStringAsFixed(2)}',
+        ),
+      );
+    }
 
     // Sort by date ascending
     events.sort((a, b) => a.date.compareTo(b.date));
@@ -502,6 +524,14 @@ class _StatementRow extends StatelessWidget {
         stripeColor = Colors.blue.shade400;
         icon = Icons.add_card;
         title = 'Extra Loan Given';
+        break;
+      case _EventType.rateChange:
+        final isIncrease = event.newRate > event.previousRate;
+        stripeColor = isIncrease ? Colors.red.shade400 : Colors.green.shade500;
+        icon = isIncrease ? Icons.trending_up : Icons.trending_down;
+        title = isIncrease
+            ? 'Interest Rate Increased'
+            : 'Interest Rate Decreased';
         break;
     }
 
@@ -601,6 +631,23 @@ class _StatementRow extends StatelessWidget {
                         Colors.blue.shade800,
                         Colors.blue.shade100,
                       ),
+                    ] else if (event.type == _EventType.rateChange) ...[
+                      _chip(
+                        '${event.previousRate.toStringAsFixed(2)}% to ${event.newRate.toStringAsFixed(2)}%',
+                        Colors.indigo.shade800,
+                        Colors.indigo.shade100,
+                      ),
+                      _chip(
+                        event.newRate > event.previousRate
+                            ? 'Additional ${event.amount.toStringAsFixed(2)}'
+                            : 'Discount ${event.amount.toStringAsFixed(2)}',
+                        event.newRate > event.previousRate
+                            ? Colors.red.shade800
+                            : Colors.green.shade800,
+                        event.newRate > event.previousRate
+                            ? Colors.red.shade100
+                            : Colors.green.shade100,
+                      ),
                     ],
                   ],
                 ),
@@ -643,6 +690,7 @@ enum _EventType {
   principalOnly,
   interestOnly,
   mixedPayment,
+  rateChange,
 }
 
 class _StatementEvent {
@@ -653,6 +701,10 @@ class _StatementEvent {
   final double principalPortion;
   final double extraInterest;
   final String? note;
+  final double previousRate;
+  final double newRate;
+  final double previousDue;
+  final double recalculatedDue;
 
   _StatementEvent({
     required this.date,
@@ -662,5 +714,9 @@ class _StatementEvent {
     this.principalPortion = 0.0,
     this.extraInterest = 0.0,
     this.note,
+    this.previousRate = 0.0,
+    this.newRate = 0.0,
+    this.previousDue = 0.0,
+    this.recalculatedDue = 0.0,
   });
 }

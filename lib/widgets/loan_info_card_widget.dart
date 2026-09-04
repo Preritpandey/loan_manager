@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:list/controllers/loan_detail_operations_controller.dart';
+import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/info_card_widget.dart';
 import 'package:list/widgets/info_row_widget.dart';
@@ -24,6 +27,130 @@ class _LoanInfoCardState extends State<LoanInfoCard> {
 
   // Removed duration editing UI per new requirement
 
+  Future<void> _showRateEditDialog() async {
+    final controller = Get.find<LoanController>();
+    final rateController = TextEditingController(
+      text: widget.loan.interestRate.toStringAsFixed(2),
+    );
+    var effectiveDate = DateTime.now();
+    InterestRateChangePreview? preview;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void updatePreview() {
+              final newRate = double.tryParse(rateController.text.trim());
+              if (newRate == null || newRate <= 0) {
+                setDialogState(() => preview = null);
+                return;
+              }
+              setDialogState(() {
+                preview = widget.loan.previewInterestRateChange(
+                  newRate,
+                  effectiveDate,
+                );
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Edit Annual Interest Rate'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Current rate: ${widget.loan.interestRate}%'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: rateController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'New annual rate (%)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => updatePreview(),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: effectiveDate,
+                          firstDate: widget.loan.date,
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (picked != null) {
+                          effectiveDate = picked;
+                          updatePreview();
+                        }
+                      },
+                      icon: const Icon(Icons.event),
+                      label: Text('Effective: ${_formatDate(effectiveDate)}'),
+                    ),
+                    if (preview != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        preview!.isIncrease
+                            ? 'Interest rate increase'
+                            : 'Interest rate discount',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Previous due: NPR ${preview!.previousCalculatedDue.toStringAsFixed(2)}',
+                      ),
+                      Text('Affected periods: ${preview!.affectedPeriodsLabel}'),
+                      Text(
+                        'Recalculated due: NPR ${preview!.recalculatedDue.toStringAsFixed(2)}',
+                      ),
+                      Text(
+                        '${preview!.isIncrease ? 'Additional interest' : 'Interest discount'}: '
+                        'NPR ${preview!.adjustmentAmount.abs().toStringAsFixed(2)}',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final newRate = double.tryParse(
+                      rateController.text.trim(),
+                    );
+                    if (newRate == null || newRate <= 0) return;
+                    final change = controller.changeInterestRate(
+                      widget.loan.serialNumber,
+                      newRate,
+                      effectiveDate,
+                    );
+                    if (change != null && mounted) {
+                      Get.find<LoanDetailOperationsController>().refreshLoan();
+                      setState(() {});
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    rateController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return InfoCard(
@@ -42,10 +169,47 @@ class _LoanInfoCardState extends State<LoanInfoCard> {
           icon: Icons.calendar_today,
         ),
         // Duration editing removed
-        InfoRow(
-          label: 'Annual Interest Rate',
-          value: '${widget.loan.interestRate}%',
-          icon: Icons.percent,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.percent, size: 18, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: MediaQuery.of(context).size.width < 600 ? 100 : 140,
+                child: Text(
+                  'Annual Interest Rate',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                    fontSize: MediaQuery.of(context).size.width < 600
+                        ? 12
+                        : 14,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '${widget.loan.interestRate}%',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Edit interest rate',
+                onPressed: _showRateEditDialog,
+                icon: const Icon(Icons.edit, size: 18),
+                constraints: const BoxConstraints.tightFor(
+                  width: 36,
+                  height: 36,
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ),
         ),
         InfoRow(
           label: 'Daily Interest Rate',

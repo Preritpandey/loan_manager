@@ -13,6 +13,7 @@ void main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(LoanAdapter());
   Hive.registerAdapter(PartialRepaymentAdapter());
+  Hive.registerAdapter(InterestRateChangeAdapter());
   Hive.registerAdapter(BankLoanAdapter());
   await Hive.openBox<Loan>('loans');
   // Register and open deposits boxes

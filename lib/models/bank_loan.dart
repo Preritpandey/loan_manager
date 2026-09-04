@@ -24,8 +24,4 @@ class BankLoan extends HiveObject {
     this.status = 'active',
   });
 
-  // Add fromJson and toJson methods if needed
 }
-
-// Run this command to generate the adapter:
-// flutter packages pub run build_runner build

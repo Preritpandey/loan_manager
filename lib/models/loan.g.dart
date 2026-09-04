@@ -10,6 +10,11 @@ class LoanAdapter extends TypeAdapter<Loan> {
   @override
   final int typeId = 0;
 
+  List<T>? _readList<T>(dynamic value) {
+    if (value is List) return value.cast<T>();
+    return null;
+  }
+
   @override
   Loan read(BinaryReader reader) {
     final numOfFields = reader.readByte();
@@ -29,7 +34,10 @@ class LoanAdapter extends TypeAdapter<Loan> {
       description: fields[9] as String,
       amountGiven: fields[10] as double,
       amountReceived: fields[11] as double,
-      partialRepayments: (fields[12] as List?)?.cast<PartialRepayment>(),
+      partialRepayments: _readList<PartialRepayment>(fields[12]),
+      interestRateChanges:
+          _readList<InterestRateChange>(fields[16]) ??
+          _readList<InterestRateChange>(fields[15]),
       nepaliDateString: fields[13] as String?,
       loanId: fields[14] as String?,
     );
@@ -38,7 +46,7 @@ class LoanAdapter extends TypeAdapter<Loan> {
   @override
   void write(BinaryWriter writer, Loan obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(14)
@@ -68,7 +76,9 @@ class LoanAdapter extends TypeAdapter<Loan> {
       ..writeByte(11)
       ..write(obj.amountReceived)
       ..writeByte(12)
-      ..write(obj.partialRepayments);
+      ..write(obj.partialRepayments)
+      ..writeByte(16)
+      ..write(obj.interestRateChanges);
   }
 
   @override
@@ -78,6 +88,58 @@ class LoanAdapter extends TypeAdapter<Loan> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is LoanAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class InterestRateChangeAdapter extends TypeAdapter<InterestRateChange> {
+  @override
+  final int typeId = 5;
+
+  @override
+  InterestRateChange read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return InterestRateChange(
+      previousRate: fields[0] as double,
+      newRate: fields[1] as double,
+      effectiveDate: fields[2] as DateTime,
+      createdAt: fields[3] as DateTime,
+      previousCalculatedDue: fields[4] as double,
+      recalculatedDue: fields[5] as double,
+      adjustmentAmount: fields[6] as double,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, InterestRateChange obj) {
+    writer
+      ..writeByte(7)
+      ..writeByte(0)
+      ..write(obj.previousRate)
+      ..writeByte(1)
+      ..write(obj.newRate)
+      ..writeByte(2)
+      ..write(obj.effectiveDate)
+      ..writeByte(3)
+      ..write(obj.createdAt)
+      ..writeByte(4)
+      ..write(obj.previousCalculatedDue)
+      ..writeByte(5)
+      ..write(obj.recalculatedDue)
+      ..writeByte(6)
+      ..write(obj.adjustmentAmount);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is InterestRateChangeAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

@@ -35,6 +35,8 @@ class Loan extends HiveObject {
   double amountReceived;
   @HiveField(12)
   List<PartialRepayment> partialRepayments;
+  @HiveField(16)
+  List<InterestRateChange> interestRateChanges;
 
   Loan({
     required this.name,
@@ -50,9 +52,11 @@ class Loan extends HiveObject {
     required this.amountGiven,
     this.amountReceived = 0.0,
     List<PartialRepayment>? partialRepayments,
+    List<InterestRateChange>? interestRateChanges,
     this.nepaliDateString,
     String? loanId,
   }) : partialRepayments = partialRepayments ?? [],
+       interestRateChanges = interestRateChanges ?? [],
        loanId = loanId ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   // Factory constructor for creating loan with Nepali date
@@ -70,6 +74,7 @@ class Loan extends HiveObject {
     required double amountGiven,
     double amountReceived = 0.0,
     List<PartialRepayment>? partialRepayments,
+    List<InterestRateChange>? interestRateChanges,
     String? loanId,
   }) {
     return Loan(
@@ -86,6 +91,7 @@ class Loan extends HiveObject {
       amountGiven: amountGiven,
       amountReceived: amountReceived,
       partialRepayments: partialRepayments,
+      interestRateChanges: interestRateChanges,
       nepaliDateString: nepaliDate.format(),
       loanId: loanId,
     );
@@ -140,47 +146,340 @@ class Loan extends HiveObject {
     return interestRate / 365.25;
   }
 
-  double _interestForDays(double principal, int days) {
+  double _interestForDays(double principal, int days, {double? rate}) {
     if (days <= 0 || principal <= 0) return 0.0;
+    final appliedRate = rate ?? interestRate;
 
     // A completed 365-day loan year earns the configured annual rate exactly.
     // Shorter spans still use the app's existing daily-rate calculation.
     if (days == 365) {
-      return principal * interestRate / 100;
+      return principal * appliedRate / 100;
     }
 
-    return (principal * dailyInterestRate * days) / 100;
+    return (principal * (appliedRate / 365.25) * days) / 100;
   }
 
-  double _outstandingDueNoEvents(DateTime asOf, {bool forSettlement = false}) {
-    final totalDays = asOf.difference(date).inDays + 1;
-    if (totalDays <= 0) return amountGiven;
+  List<InterestRateChange> get sortedInterestRateChanges {
+    return interestRateChanges
+        .map((change) {
+          final effectiveDate = _effectiveDateForRateChange(
+            change.effectiveDate,
+          );
+          if (effectiveDate == change.effectiveDate) return change;
 
-    final isOverdueAtDate = totalDays > duration;
-    final firstPhaseDays = totalDays <= duration ? totalDays : duration;
-    final appliedFirstPhaseDays =
-        (firstPhaseDays < 30 && forSettlement && !isOverdueAtDate)
-        ? 30
-        : firstPhaseDays;
+          return InterestRateChange(
+            previousRate: change.previousRate,
+            newRate: change.newRate,
+            effectiveDate: effectiveDate,
+            createdAt: change.createdAt,
+            previousCalculatedDue: change.previousCalculatedDue,
+            recalculatedDue: change.recalculatedDue,
+            adjustmentAmount: change.adjustmentAmount,
+          );
+        })
+        .toList()
+      ..sort((a, b) => a.effectiveDate.compareTo(b.effectiveDate));
+  }
 
-    var currentDue =
-        amountGiven + _interestForDays(amountGiven, appliedFirstPhaseDays);
+  double get originalInterestRate {
+    final changes = sortedInterestRateChanges;
+    if (changes.isEmpty) return interestRate;
+    return changes.first.previousRate;
+  }
 
-    if (!isOverdueAtDate) {
-      return currentDue;
+  double interestRateAt(DateTime at) {
+    var rate = originalInterestRate;
+    for (final change in sortedInterestRateChanges) {
+      if (change.effectiveDate.isAfter(at)) break;
+      rate = change.newRate;
+    }
+    return rate;
+  }
+
+  double _interestForDateRange(double principal, DateTime start, DateTime end) {
+    if (!end.isAfter(start) || principal <= 0) return 0.0;
+
+    var cursor = start;
+    var interest = 0.0;
+    final changes = sortedInterestRateChanges
+        .where((change) => change.effectiveDate.isAfter(start))
+        .where((change) => change.effectiveDate.isBefore(end))
+        .toList();
+
+    for (final change in changes) {
+      final days = change.effectiveDate.difference(cursor).inDays;
+      interest += _interestForDays(
+        principal,
+        days,
+        rate: interestRateAt(cursor),
+      );
+      cursor = change.effectiveDate;
     }
 
-    var remainingOverdueDays = totalDays - duration;
-    while (remainingOverdueDays >= 365) {
-      currentDue += _interestForDays(currentDue, 365);
-      remainingOverdueDays -= 365;
+    final tailDays = end.difference(cursor).inDays;
+    interest += _interestForDays(
+      principal,
+      tailDays,
+      rate: interestRateAt(cursor),
+    );
+    return interest;
+  }
+
+  DateTime _effectiveDateForRateChange(DateTime requestedDate) {
+    final asOf = requestedDate.isBefore(date) ? date : requestedDate;
+    final affectedStart = _firstUnsettledInterestPeriodStart(asOf);
+    if (affectedStart == null) return asOf;
+    return affectedStart.isBefore(date) ? date : affectedStart;
+  }
+
+  DateTime? _firstUnsettledInterestPeriodStart(DateTime asOf) {
+    final end = asOf.add(const Duration(days: 1));
+    final periodDays = duration > 0 ? duration : 365;
+    final events = partialRepayments
+        .where((event) => !event.date.isAfter(asOf))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    final periodStarts = <DateTime>[];
+    final interestBalances = <double>[];
+    var principal = amountGiven;
+    var accruedInterest = 0.0;
+    var currentPeriodStart = date;
+    var cursor = date;
+    var nextBoundary = date.add(Duration(days: periodDays));
+    var eventIndex = 0;
+
+    DateTime normalizeEventDate(DateTime eventDate) {
+      if (eventDate.isBefore(date)) return date;
+      if (eventDate.isAfter(end)) return end;
+      return eventDate;
     }
 
-    if (remainingOverdueDays > 0) {
-      currentDue += _interestForDays(currentDue, remainingOverdueDays);
+    void payOldestInterest(double payment) {
+      var remaining = payment;
+      final accruedPayment = remaining > accruedInterest
+          ? accruedInterest
+          : remaining;
+      accruedInterest -= accruedPayment;
+      remaining -= accruedPayment;
+
+      for (var i = 0; i < interestBalances.length && remaining > 0; i++) {
+        final paid = remaining > interestBalances[i]
+            ? interestBalances[i]
+            : remaining;
+        interestBalances[i] -= paid;
+        remaining -= paid;
+      }
+
+      if (remaining > 0) {
+        final principalPayment = remaining > principal ? principal : remaining;
+        principal -= principalPayment;
+      }
     }
 
-    return currentDue;
+    void applyPayment(PartialRepayment event) {
+      var payment = event.amount;
+      if (payment < 0) {
+        principal += -payment;
+        return;
+      }
+
+      if (event.daysSinceLoan == -2) {
+        final principalPayment = payment > principal ? principal : payment;
+        principal -= principalPayment;
+        return;
+      }
+
+      payOldestInterest(payment);
+    }
+
+    while (cursor.isBefore(end)) {
+      final hasEvent = eventIndex < events.length;
+      final eventDate = hasEvent
+          ? normalizeEventDate(events[eventIndex].date)
+          : null;
+
+      var nextCut = end;
+      if (nextBoundary.isBefore(nextCut)) {
+        nextCut = nextBoundary;
+      }
+      if (eventDate != null &&
+          (eventDate.isBefore(nextCut) || eventDate.isAtSameMomentAs(nextCut))) {
+        nextCut = eventDate;
+      }
+
+      if (nextCut.isAfter(cursor)) {
+        final capitalizedInterest = interestBalances.fold<double>(
+          0.0,
+          (sum, balance) => sum + balance,
+        );
+        accruedInterest += _interestForDays(
+          principal + capitalizedInterest,
+          nextCut.difference(cursor).inDays,
+        );
+        cursor = nextCut;
+      }
+
+      while (eventIndex < events.length &&
+          normalizeEventDate(events[eventIndex].date).isAtSameMomentAs(cursor)) {
+        applyPayment(events[eventIndex]);
+        eventIndex += 1;
+      }
+
+      if (cursor.isAtSameMomentAs(nextBoundary) ||
+          cursor.isAfter(nextBoundary)) {
+        periodStarts.add(currentPeriodStart);
+        interestBalances.add(accruedInterest);
+        accruedInterest = 0.0;
+        currentPeriodStart = nextBoundary;
+        nextBoundary = nextBoundary.add(const Duration(days: 365));
+      }
+    }
+
+    const epsilon = 0.005;
+    for (var i = 0; i < interestBalances.length; i++) {
+      if (interestBalances[i] > epsilon) return periodStarts[i];
+    }
+    if (accruedInterest > epsilon) return currentPeriodStart;
+    return null;
+  }
+
+  int _interestPeriodNumberFor(DateTime periodStart) {
+    final firstBoundary = date.add(Duration(days: duration > 0 ? duration : 365));
+    if (periodStart.isBefore(firstBoundary)) return 1;
+    final daysAfterFirstPeriod = periodStart.difference(firstBoundary).inDays;
+    return 2 + (daysAfterFirstPeriod ~/ 365);
+  }
+
+  int _elapsedInterestPeriodNumberAt(DateTime asOf) {
+    final end = asOf.add(const Duration(days: 1));
+    final firstBoundary = date.add(Duration(days: duration > 0 ? duration : 365));
+    if (!end.isAfter(firstBoundary)) return 1;
+    final daysAfterFirstPeriod = end.difference(firstBoundary).inDays;
+    return 1 + ((daysAfterFirstPeriod + 364) ~/ 365);
+  }
+
+  String rateChangeAffectedPeriodsLabel(
+    InterestRateChange change, {
+    DateTime? asOf,
+  }) {
+    final startPeriod = _interestPeriodNumberFor(change.effectiveDate);
+    final endPeriod = _elapsedInterestPeriodNumberAt(asOf ?? DateTime.now());
+    final normalizedEnd = endPeriod < startPeriod ? startPeriod : endPeriod;
+    return startPeriod == normalizedEnd
+        ? 'Year $startPeriod'
+        : 'Year $startPeriod - Year $normalizedEnd';
+  }
+
+  _DueSimulation _simulateDueAt(DateTime asOf, {bool forSettlement = false}) {
+    final end = asOf.add(const Duration(days: 1));
+    final periodDays = duration > 0 ? duration : 365;
+    final events = partialRepayments
+        .where((event) => !event.date.isAfter(asOf))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    var principal = amountGiven;
+    var capitalizedInterest = 0.0;
+    var accruedInterest = 0.0;
+    var paidInterest = 0.0;
+    var cursor = date;
+    var nextBoundary = date.add(Duration(days: periodDays));
+    var eventIndex = 0;
+
+    DateTime normalizeEventDate(DateTime eventDate) {
+      if (eventDate.isBefore(date)) return date;
+      if (eventDate.isAfter(end)) return end;
+      return eventDate;
+    }
+
+    void applyPayment(PartialRepayment event) {
+      var payment = event.amount;
+      if (payment < 0) {
+        principal += -payment;
+        return;
+      }
+
+      if (event.daysSinceLoan == -2) {
+        final principalPayment = payment > principal ? principal : payment;
+        principal -= principalPayment;
+        return;
+      }
+
+      final accruedPayment = payment > accruedInterest
+          ? accruedInterest
+          : payment;
+      accruedInterest -= accruedPayment;
+      paidInterest += accruedPayment;
+      payment -= accruedPayment;
+
+      final capitalizedPayment = payment > capitalizedInterest
+          ? capitalizedInterest
+          : payment;
+      capitalizedInterest -= capitalizedPayment;
+      paidInterest += capitalizedPayment;
+      payment -= capitalizedPayment;
+
+      if (event.daysSinceLoan != -1 && payment > 0) {
+        final principalPayment = payment > principal ? principal : payment;
+        principal -= principalPayment;
+      } else if (payment > 0) {
+        paidInterest += payment;
+      }
+    }
+
+    while (cursor.isBefore(end)) {
+      final hasEvent = eventIndex < events.length;
+      final eventDate = hasEvent
+          ? normalizeEventDate(events[eventIndex].date)
+          : null;
+
+      var nextCut = end;
+      if (nextBoundary.isBefore(nextCut)) {
+        nextCut = nextBoundary;
+      }
+      if (eventDate != null &&
+          (eventDate.isBefore(nextCut) || eventDate.isAtSameMomentAs(nextCut))) {
+        nextCut = eventDate;
+      }
+
+      if (nextCut.isAfter(cursor)) {
+        final base = principal + capitalizedInterest;
+        accruedInterest += _interestForDateRange(base, cursor, nextCut);
+        cursor = nextCut;
+      }
+
+      while (eventIndex < events.length &&
+          normalizeEventDate(events[eventIndex].date).isAtSameMomentAs(cursor)) {
+        applyPayment(events[eventIndex]);
+        eventIndex += 1;
+      }
+
+      if (cursor.isAtSameMomentAs(nextBoundary) ||
+          cursor.isAfter(nextBoundary)) {
+        capitalizedInterest += accruedInterest;
+        accruedInterest = 0.0;
+        nextBoundary = nextBoundary.add(const Duration(days: 365));
+      }
+    }
+
+    if (forSettlement) {
+      final daysSinceStart = asOf.difference(date).inDays + 1;
+      final isOverdueAtDate = daysSinceStart > duration;
+      if (!isOverdueAtDate && daysSinceStart < 30) {
+        final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
+        final interestAccounted =
+            paidInterest + capitalizedInterest + accruedInterest;
+        final shortfall = minInterest - interestAccounted;
+        if (shortfall > 0) accruedInterest += shortfall;
+      }
+    }
+
+    return _DueSimulation(
+      principal: principal,
+      capitalizedInterest: capitalizedInterest,
+      accruedInterest: accruedInterest,
+    );
   }
 
   // Calculate interest (uses agreed period for total due calculations)
@@ -208,7 +507,9 @@ class Loan extends HiveObject {
       // Accrue interest from lastDate to repayment date on current principal
       final days = repayment.date.difference(lastDate).inDays;
       if (days > 0 && principal > 0) {
-        accrued += (principal * dailyInterestRate * days) / 100;
+        accrued += interestRateChanges.isEmpty
+            ? (principal * dailyInterestRate * days) / 100
+            : _interestForDateRange(principal, lastDate, repayment.date);
       }
 
       double payment = repayment.amount;
@@ -268,7 +569,9 @@ class Loan extends HiveObject {
     // Accrue interest from last event to asOf on remaining principal
     final tailDays = asOf.difference(lastDate).inDays;
     if (tailDays > 0 && principal > 0) {
-      accrued += (principal * dailyInterestRate * tailDays) / 100;
+      accrued += interestRateChanges.isEmpty
+          ? (principal * dailyInterestRate * tailDays) / 100
+          : _interestForDateRange(principal, lastDate, asOf);
     }
 
     return {
@@ -296,52 +599,9 @@ class Loan extends HiveObject {
   // For overdue loans, applies compound interest after the due date.
   double get currentCalculatedInterest {
     final asOf = DateTime.now();
-
-    // If no partial repayments/top-ups, apply capitalization-at-due-date rule
-    if (partialRepayments.isEmpty) {
-      return _outstandingDueNoEvents(asOf, forSettlement: true) - amountGiven;
-    }
-
-    // For loans with partial repayments, use the ledger
-    final s = _ledgerUpTo(asOf);
-    double accrued = s['accrued'] ?? 0.0;
-    final interestPaid =
-        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
-
-    // If the loan is overdue, we need to ensure the overdue interest is compounded
-    if (isOverdue) {
-      final dueDate = date.add(Duration(days: duration));
-      final overdueDays = asOf.difference(dueDate).inDays;
-
-      if (overdueDays > 0) {
-        // Get the state of the loan at the due date
-        final atDueDate = _ledgerUpTo(dueDate);
-        final principalAtDue = atDueDate['principal'] ?? 0.0;
-        final interestAtDue = atDueDate['accrued'] ?? 0.0;
-
-        // Calculate the new principal (original principal + interest up to due date)
-        final newPrincipal = principalAtDue + interestAtDue;
-
-        // Calculate interest on the new principal for the overdue period
-        final overdueInterest =
-            (newPrincipal * dailyInterestRate * overdueDays) / 100;
-
-        // Update the accrued interest to include the compounded overdue interest
-        accrued = interestAtDue + overdueInterest + (s['accrued'] ?? 0.0);
-      }
-    }
-
-    // Enforce minimum 30 days on early settlement check for non-overdue loans
-    if (!isOverdue) {
-      final daysSinceStart = asOf.difference(date).inDays;
-      if (daysSinceStart < 30) {
-        final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
-        final shortfall = minInterest - (interestPaid + accrued);
-        if (shortfall > 0) accrued += shortfall;
-      }
-    }
-
-    return accrued;
+    return (outstandingDueAt(asOf, forSettlement: true) -
+            remainingPrincipalAt(asOf))
+        .clamp(0.0, double.infinity);
   }
 
   // Calculate interest generated over the full agreed period, respecting partial repayments
@@ -363,22 +623,9 @@ class Loan extends HiveObject {
   // enforcing minimum 30 days if within first 30 days and treated as settlement.
   double get compoundInterest {
     final asOf = DateTime.now();
-    if (partialRepayments.isEmpty) {
-      return _outstandingDueNoEvents(asOf, forSettlement: true) - amountGiven;
-    }
-
-    final s = _ledgerUpTo(asOf);
-    double accrued = s['accrued'] ?? 0.0;
-    final interestPaid =
-        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
-
-    final daysSinceStart = asOf.difference(date).inDays;
-    if (daysSinceStart < 30) {
-      final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
-      final shortfall = minInterest - (interestPaid + accrued);
-      if (shortfall > 0) accrued += shortfall;
-    }
-    return accrued;
+    return (outstandingDueAt(asOf, forSettlement: true) -
+            remainingPrincipalAt(asOf))
+        .clamp(0.0, double.infinity);
   }
 
   // Outstanding balance now (principal + interest up to now)
@@ -409,7 +656,7 @@ class Loan extends HiveObject {
     return amountGiven + agreedPeriodInterest;
   }
 
-  // Overdue interest is not applied beyond daily simple interest per the new rules.
+  // Overdue interest is included through outstandingDueAt's period simulation.
   double get overdueInterest {
     return 0.0;
   }
@@ -592,6 +839,127 @@ class Loan extends HiveObject {
     }
   }
 
+  InterestRateChangePreview previewInterestRateChange(
+    double newRate,
+    DateTime effectiveDate,
+  ) {
+    final asOf = effectiveDate.isBefore(date) ? date : effectiveDate;
+    final appliedEffectiveDate = _effectiveDateForRateChange(effectiveDate);
+    final beforeDue = outstandingDueAt(asOf, forSettlement: false);
+    final previousRate = interestRateAt(appliedEffectiveDate);
+    final existingRate = interestRate;
+
+    final previewChange = InterestRateChange(
+      previousRate: previousRate,
+      newRate: newRate,
+      effectiveDate: appliedEffectiveDate,
+      createdAt: DateTime.now(),
+      previousCalculatedDue: beforeDue,
+      recalculatedDue: beforeDue,
+      adjustmentAmount: 0.0,
+    );
+
+    interestRate = newRate;
+    interestRateChanges.add(previewChange);
+    final afterDue = outstandingDueAt(asOf, forSettlement: false);
+    interestRateChanges.remove(previewChange);
+    interestRate = existingRate;
+
+    return InterestRateChangePreview(
+      previousRate: previousRate,
+      newRate: newRate,
+      effectiveDate: appliedEffectiveDate,
+      affectedPeriodsLabel: rateChangeAffectedPeriodsLabel(
+        previewChange,
+        asOf: asOf,
+      ),
+      previousCalculatedDue: beforeDue,
+      recalculatedDue: afterDue,
+      adjustmentAmount: afterDue - beforeDue,
+    );
+  }
+
+  InterestRateChange changeInterestRate(double newRate, DateTime effectiveDate) {
+    final preview = previewInterestRateChange(newRate, effectiveDate);
+    final change = InterestRateChange(
+      previousRate: preview.previousRate,
+      newRate: preview.newRate,
+      effectiveDate: preview.effectiveDate,
+      createdAt: DateTime.now(),
+      previousCalculatedDue: preview.previousCalculatedDue,
+      recalculatedDue: preview.recalculatedDue,
+      adjustmentAmount: preview.adjustmentAmount,
+    );
+
+    interestRate = newRate;
+    interestRateChanges.add(change);
+    interestRateChanges.sort(
+      (a, b) => a.effectiveDate.compareTo(b.effectiveDate),
+    );
+    if (isInBox) save();
+    return change;
+  }
+
+  InterestRateChange rateChangeDisplaySummary(InterestRateChange change) {
+    final asOf = DateTime.now();
+    final allChanges = List<InterestRateChange>.from(interestRateChanges);
+    final orderedChanges = List<InterestRateChange>.from(allChanges)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final changeIndex = orderedChanges.indexOf(change);
+    if (changeIndex == -1) return change;
+
+    final effectiveDate = change.effectiveDate;
+    final normalizedChange = InterestRateChange(
+      previousRate: change.previousRate,
+      newRate: change.newRate,
+      effectiveDate: effectiveDate,
+      createdAt: change.createdAt,
+      previousCalculatedDue: change.previousCalculatedDue,
+      recalculatedDue: change.recalculatedDue,
+      adjustmentAmount: change.adjustmentAmount,
+    );
+    final previousChanges = orderedChanges.take(changeIndex).toList();
+    final appliedChanges = [
+      ...previousChanges,
+      normalizedChange,
+    ];
+    final existingRate = interestRate;
+
+    double calculateWith(List<InterestRateChange> changes, double fallbackRate) {
+      interestRate = fallbackRate;
+      interestRateChanges
+        ..clear()
+        ..addAll(changes);
+      return outstandingDueAt(asOf, forSettlement: false);
+    }
+
+    try {
+      final previousFallbackRate = previousChanges.isEmpty
+          ? change.previousRate
+          : previousChanges.last.newRate;
+      final previousDue = calculateWith(
+        previousChanges,
+        previousFallbackRate,
+      );
+      final recalculatedDue = calculateWith(appliedChanges, change.newRate);
+
+      return InterestRateChange(
+        previousRate: change.previousRate,
+        newRate: change.newRate,
+        effectiveDate: effectiveDate,
+        createdAt: change.createdAt,
+        previousCalculatedDue: previousDue,
+        recalculatedDue: recalculatedDue,
+        adjustmentAmount: recalculatedDue - previousDue,
+      );
+    } finally {
+      interestRate = existingRate;
+      interestRateChanges
+        ..clear()
+        ..addAll(allChanges);
+    }
+  }
+
   // Get current balance (remaining principal) after all partial repayments using ledger
   double get currentBalance {
     final s = _ledgerUpTo(DateTime.now());
@@ -613,36 +981,8 @@ class Loan extends HiveObject {
   // Compute outstanding due at an arbitrary date.
   // If forSettlement is true and asOf is within 30 days, enforce minimum 30-day interest.
   double outstandingDueAt(DateTime asOf, {bool forSettlement = false}) {
-    // Calculate total days including today
-    final totalDays =
-        asOf.difference(date).inDays +
-        1; // +1 to include both start and end days
-    final isOverdue = totalDays > duration;
-
-    // If no partial repayments/top-ups, apply capitalization-at-due-date rule
-    if (partialRepayments.isEmpty) {
-      return _outstandingDueNoEvents(asOf, forSettlement: forSettlement);
-    }
-
-    // For loans with partial repayments, use the ledger
-    final s = _ledgerUpTo(asOf);
-    double principal = s['principal'] ?? 0.0;
-    double accrued = s['accrued'] ?? 0.0;
-    final interestPaid =
-        (s['interestPaid'] ?? 0.0) + (s['extraInterestPaid'] ?? 0.0);
-
-    // Only enforce 30-day minimum for non-overdue loans when forSettlement is true
-    if (forSettlement && !isOverdue) {
-      final daysSinceStart =
-          asOf.difference(date).inDays + 1; // Include both start and end days
-      if (daysSinceStart < 30) {
-        final minInterest = (amountGiven * dailyInterestRate * 30) / 100;
-        final shortfall = minInterest - (interestPaid + accrued);
-        if (shortfall > 0) accrued += shortfall;
-      }
-    }
-
-    return principal + accrued;
+    final simulation = _simulateDueAt(asOf, forSettlement: forSettlement);
+    return simulation.total.clamp(0.0, double.infinity);
   }
 
   // Get last event date (loan start or last repayment)
@@ -715,4 +1055,78 @@ class PartialRepayment {
     required this.date,
     required this.daysSinceLoan,
   });
+}
+
+@HiveType(typeId: 5)
+class InterestRateChange {
+  @HiveField(0)
+  double previousRate;
+
+  @HiveField(1)
+  double newRate;
+
+  @HiveField(2)
+  DateTime effectiveDate;
+
+  @HiveField(3)
+  DateTime createdAt;
+
+  @HiveField(4)
+  double previousCalculatedDue;
+
+  @HiveField(5)
+  double recalculatedDue;
+
+  @HiveField(6)
+  double adjustmentAmount;
+
+  InterestRateChange({
+    required this.previousRate,
+    required this.newRate,
+    required this.effectiveDate,
+    required this.createdAt,
+    required this.previousCalculatedDue,
+    required this.recalculatedDue,
+    required this.adjustmentAmount,
+  });
+
+  bool get isIncrease => newRate > previousRate;
+  bool get isDecrease => newRate < previousRate;
+}
+
+class InterestRateChangePreview {
+  final double previousRate;
+  final double newRate;
+  final DateTime effectiveDate;
+  final String affectedPeriodsLabel;
+  final double previousCalculatedDue;
+  final double recalculatedDue;
+  final double adjustmentAmount;
+
+  InterestRateChangePreview({
+    required this.previousRate,
+    required this.newRate,
+    required this.effectiveDate,
+    required this.affectedPeriodsLabel,
+    required this.previousCalculatedDue,
+    required this.recalculatedDue,
+    required this.adjustmentAmount,
+  });
+
+  bool get isIncrease => newRate > previousRate;
+  bool get isDecrease => newRate < previousRate;
+}
+
+class _DueSimulation {
+  final double principal;
+  final double capitalizedInterest;
+  final double accruedInterest;
+
+  const _DueSimulation({
+    required this.principal,
+    required this.capitalizedInterest,
+    required this.accruedInterest,
+  });
+
+  double get total => principal + capitalizedInterest + accruedInterest;
 }

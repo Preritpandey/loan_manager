@@ -737,6 +737,72 @@ class LoanController extends GetxController {
     }
   }
 
+  InterestRateChange? changeInterestRate(
+    String serialNumber,
+    double newRate,
+    DateTime effectiveDate,
+  ) {
+    try {
+      if (newRate <= 0) {
+        _showSnackbar('Error', 'Interest rate must be positive');
+        return null;
+      }
+
+      final loanIndex = loans.indexWhere(
+        (loan) => loan.serialNumber == serialNumber,
+      );
+      if (loanIndex == -1) {
+        _showSnackbar('Error', 'Loan not found');
+        return null;
+      }
+
+      final loan = loans[loanIndex];
+      if ((loan.interestRate - newRate).abs() < 0.000001) {
+        _showSnackbar('No Change', 'The new rate is the same as the current rate');
+        return null;
+      }
+
+      final effective = effectiveDate.isBefore(loan.date)
+          ? loan.date
+          : effectiveDate;
+      final change = loan.changeInterestRate(newRate, effective);
+      loan.save();
+
+      loans[loanIndex] = loan;
+      final filteredIndex = filteredLoans.indexWhere(
+        (l) => l.serialNumber == serialNumber,
+      );
+      if (filteredIndex != -1) {
+        filteredLoans[filteredIndex] = loan;
+      }
+
+      loans.refresh();
+      filteredLoans.refresh();
+      refreshLoanCalculations();
+      update(['loan_summary']);
+
+      _recordEvent(
+        name: loan.name,
+        serial: loan.serialNumber,
+        type: 'rate_change',
+        recordedDate: effective,
+        amount: change.adjustmentAmount.abs(),
+        jewelleryName: loan.jewelleryName,
+        dueAfter: change.recalculatedDue,
+        description:
+            '${change.isIncrease ? 'Interest Rate Increased' : 'Interest Rate Decreased'}: '
+            '${change.previousRate.toStringAsFixed(2)}% to ${change.newRate.toStringAsFixed(2)}%',
+      );
+
+      _showSnackbar('Success', 'Interest rate updated successfully');
+      return change;
+    } catch (e) {
+      print('Error changing interest rate: $e');
+      _showSnackbar('Error', 'Failed to update interest rate');
+      return null;
+    }
+  }
+
   // Helper method to safely show snackbars
   void _showSnackbar(String title, String message) {
     try {

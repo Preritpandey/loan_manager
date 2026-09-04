@@ -59,6 +59,16 @@ class LoanDetailOperationsController extends GetxController {
     _loadSavedOverrideDays();
   }
 
+  void refreshLoan() {
+    final refreshed =
+        _loanController.getLoanByLoanId(_loan.loanId) ??
+        _loanController.getLoanBySerial(_loan.serialNumber);
+    if (refreshed != null) {
+      _loan = refreshed;
+    }
+    update();
+  }
+
   void _startPeriodicUpdates() {
     _updateTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       // Force UI update for real-time calculations

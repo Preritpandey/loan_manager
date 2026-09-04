@@ -53,21 +53,29 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.loan.name,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(
-              'Serial: ${widget.loan.serialNumber}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
+        title: GetBuilder<LoanDetailOperationsController>(
+          builder: (ops) {
+            final loan = ops.loan;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  loan.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  'Serial: ${loan.serialNumber}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         backgroundColor: Color.fromARGB(255, 204, 21, 27),
         foregroundColor: Colors.white,
@@ -85,66 +93,81 @@ class _LoanDetailPageState extends State<LoanDetailPage> {
             ),
             child: Column(
               children: [
-                // Add to Bank Button - Wrapped in Obx and referencing Rx to react to changes
-                Obx(() {
-                  // Access RxList bankLoans to ensure Obx has an observable dependency
-                  final isInBank = bankLoanController.bankLoans.any(
-                    (b) => b.loanId == widget.loan.loanId,
-                  );
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: ElevatedButton.icon(
-                      onPressed: isInBank
-                          ? null
-                          : () async {
-                              final success = await bankLoanController
-                                  .addLoanToBank(widget.loan);
-                              if (success) {
-                                Get.snackbar(
-                                  'Success',
-                                  'Loan added to bank collection',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                  backgroundColor: Colors.green,
-                                  colorText: Colors.white,
-                                );
-                              } else {
-                                Get.snackbar(
-                                  'Error',
-                                  'Failed to add loan to bank',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                  backgroundColor: Colors.red,
-                                  colorText: Colors.white,
-                                );
-                              }
-                            },
-                      icon: Icon(
-                        isInBank
-                            ? Icons.account_balance
-                            : Icons.account_balance_wallet,
-                      ),
-                      label: Text(isInBank ? 'Added to Bank' : 'Add to Bank'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isInBank ? Colors.grey : Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  );
-                }),
+                GetBuilder<LoanDetailOperationsController>(
+                  builder: (ops) {
+                    final loan = ops.loan;
+                    return Column(
+                      children: [
+                        // Add to Bank Button - Wrapped in Obx and referencing Rx to react to changes
+                        Obx(() {
+                          // Access RxList bankLoans to ensure Obx has an observable dependency
+                          final isInBank = bankLoanController.bankLoans.any(
+                            (b) => b.loanId == loan.loanId,
+                          );
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: ElevatedButton.icon(
+                              onPressed: isInBank
+                                  ? null
+                                  : () async {
+                                      final success = await bankLoanController
+                                          .addLoanToBank(loan);
+                                      if (success) {
+                                        Get.snackbar(
+                                          'Success',
+                                          'Loan added to bank collection',
+                                          snackPosition: SnackPosition.BOTTOM,
+                                          backgroundColor: Colors.green,
+                                          colorText: Colors.white,
+                                        );
+                                      } else {
+                                        Get.snackbar(
+                                          'Error',
+                                          'Failed to add loan to bank',
+                                          snackPosition: SnackPosition.BOTTOM,
+                                          backgroundColor: Colors.red,
+                                          colorText: Colors.white,
+                                        );
+                                      }
+                                    },
+                              icon: Icon(
+                                isInBank
+                                    ? Icons.account_balance
+                                    : Icons.account_balance_wallet,
+                              ),
+                              label: Text(
+                                isInBank ? 'Added to Bank' : 'Add to Bank',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isInBank
+                                    ? Colors.grey
+                                    : Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
 
-                // Status Header
-                LoanStatusHeader(loan: widget.loan),
-                const SizedBox(height: 8),
-                _DurationOverrideBar(controller: operationsController),
+                        // Status Header
+                        LoanStatusHeader(loan: loan),
+                        const SizedBox(height: 8),
+                        _DurationOverrideBar(controller: operationsController),
 
-                if (isDesktop)
-                  _buildDesktopLayout(widget.loan)
-                else
-                  _buildMobileLayout(widget.loan),
+                        if (isDesktop)
+                          _buildDesktopLayout(loan)
+                        else
+                          _buildMobileLayout(loan),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
