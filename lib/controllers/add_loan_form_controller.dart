@@ -152,8 +152,8 @@ class AddLoanFormController extends GetxController {
         return false;
       }
 
-      _loanController.addLoan(loan);
-      success = true; // Set success to true after successful loan addition
+      success = _loanController.addLoan(loan);
+      if (!success) return false;
 
       // Navigate to the loan detail page of the newly created loan
       Get.off(() => LoanDetailPage(loan: loan));

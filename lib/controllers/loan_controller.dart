@@ -10,6 +10,7 @@ import 'package:file_selector/file_selector.dart';
 import 'dart:io';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:list/models/loan_event.dart';
+import 'package:list/utils/loan_serial_number_generator.dart';
 
 class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
@@ -365,22 +366,39 @@ class LoanController extends GetxController {
     }
   }
 
-  void addLoan(Loan loan) {
+  bool addLoan(Loan loan) {
     try {
-      // Check for duplicate loans: same customer name + same jewellery name + same serial number
-      // This allows the same customer to have multiple loans with different collateral
+      if (LoanSerialNumberGenerator.shouldAutoReplaceSerial(
+        serialNumber: loan.serialNumber,
+        customerName: loan.name,
+        existingLoans: loans,
+      )) {
+        final generatedSerial = LoanSerialNumberGenerator.generate(
+          customerName: loan.name,
+          borrowerName: loan.name,
+          existingLoans: loans,
+        );
+        if (generatedSerial.isNotEmpty) {
+          loan.serialNumber = generatedSerial;
+        }
+      }
+
+      if (loan.serialNumber.trim().isEmpty) {
+        _showSnackbar('Error', 'Serial number is required');
+        return false;
+      }
+
+      // Serial numbers are used as loan lookup keys, so keep them globally unique.
       if (loans.any(
         (existingLoan) =>
-            existingLoan.name.trim().toLowerCase() ==
-                loan.name.trim().toLowerCase() &&
-            existingLoan.serialNumber == loan.serialNumber &&
-            existingLoan.jewelleryName == loan.jewelleryName,
+            existingLoan.serialNumber.trim().toLowerCase() ==
+            loan.serialNumber.trim().toLowerCase(),
       )) {
         _showSnackbar(
           'Error',
-          'A loan with this customer, serial number, and jewellery already exists',
+          'A loan with this serial number already exists',
         );
-        return;
+        return false;
       }
 
       loanBox.add(loan);
@@ -401,9 +419,10 @@ class LoanController extends GetxController {
       refreshLoanCalculations();
 
       _showSnackbar('Success', 'Loan added successfully');
-      
+      return true;
     } catch (e) {
       _showSnackbar('Error', 'Failed to add loan');
+      return false;
     }
   }
 
