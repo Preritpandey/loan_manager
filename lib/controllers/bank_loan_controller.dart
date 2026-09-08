@@ -23,7 +23,6 @@ class BankLoanController extends GetxController {
       await _loadBankLoans();
       isInitialized.value = true;
     } catch (e) {
-      print('Error initializing BankLoanController: $e');
       rethrow;
     } finally {
       isLoading.value = false;
@@ -41,7 +40,6 @@ class BankLoanController extends GetxController {
     try {
       bankLoans.assignAll(_bankLoansBox.values.toList());
     } catch (e) {
-      print('Error loading bank loans: $e');
       rethrow;
     }
   }
@@ -63,7 +61,6 @@ class BankLoanController extends GetxController {
       await _loadBankLoans();
       return true;
     } catch (e) {
-      print('Error adding loan to bank: $e');
       return false;
     }
   }
@@ -74,7 +71,6 @@ class BankLoanController extends GetxController {
       await _loadBankLoans();
       return true;
     } catch (e) {
-      print('Error removing loan from bank: $e');
       return false;
     }
   }

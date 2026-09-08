@@ -273,7 +273,7 @@ class LoanDetailOperationsController extends GetxController {
         );
       });
     } catch (e) {
-      print('Error showing snackbar: $e');
+      // Snackbar failures are non-fatal; ignore.
     }
   }
 

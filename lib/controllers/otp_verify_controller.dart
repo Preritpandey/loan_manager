@@ -37,7 +37,6 @@ class AuthController extends GetxController {
         Get.offAllNamed('/otp');
       }
     } catch (e) {
-      print('Error checking OTP status: $e');
       Get.offAllNamed('/otp'); // Default to OTP screen on error
     } finally {
       isCheckingStatus.value = false;

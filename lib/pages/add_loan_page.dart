@@ -13,25 +13,44 @@ class AddLoanPage extends StatefulWidget {
 
 class _AddLoanPageState extends State<AddLoanPage> {
   late AddLoanFormController controller;
+  late final TextEditingController _serialNumberController;
+  late final Worker _formDataWorker;
   bool isAddingForExistingCustomer = false;
 
   @override
   void initState() {
     super.initState();
     controller = Get.put(AddLoanFormController());
+    _serialNumberController = TextEditingController();
+    _formDataWorker = ever(controller.formData, (_) {
+      final serialNumber =
+          controller.formData['serialNumber']?.toString() ?? '';
+      if (_serialNumberController.text != serialNumber) {
+        _serialNumberController.value = TextEditingValue(
+          text: serialNumber,
+          selection: TextSelection.collapsed(offset: serialNumber.length),
+        );
+      }
+    });
 
     // Check for arguments passed from Customer Loans Page
     final arguments = Get.arguments as Map<String, dynamic>?;
     if (arguments != null) {
-      print('🔧 AddLoanPage received arguments: $arguments');
       isAddingForExistingCustomer = true;
       // Pre-fill form with customer information
       WidgetsBinding.instance.addPostFrameCallback((_) {
         controller.preFillFromArguments(arguments);
       });
     } else {
-      print('🔧 AddLoanPage: No arguments received - creating new customer');
+      isAddingForExistingCustomer = false;
     }
+  }
+
+  @override
+  void dispose() {
+    _formDataWorker.dispose();
+    _serialNumberController.dispose();
+    super.dispose();
   }
 
   @override
@@ -210,13 +229,7 @@ class _AddLoanPageState extends State<AddLoanPage> {
                           icon: Icons.diamond_outlined,
                         ),
                       ]),
-                      _buildTextField(
-                        'Serial Number',
-                        'serialNumber',
-                        icon: Icons.qr_code_outlined,
-                        enabled:
-                            true, // Always enabled as it represents the collateral
-                      ),
+                      _buildSerialNumberField(),
 
                       const SizedBox(height: 24),
 
@@ -386,14 +399,6 @@ class _AddLoanPageState extends State<AddLoanPage> {
             // If field is disabled and value is null, use the existing formData value
             final finalValue = value ?? controller.formData[key];
             controller.updateFormData(key, finalValue);
-
-            // Debug logging for form saving
-            if (isAddingForExistingCustomer &&
-                (key == 'name' || key == 'phone' || key == 'address')) {
-              print(
-                '🔧 Form saving - Key: $key, Value: $value, FinalValue: $finalValue',
-              );
-            }
           },
           onChanged: (value) {
             // For disabled fields, ensure the value is preserved
@@ -426,6 +431,29 @@ class _AddLoanPageState extends State<AddLoanPage> {
             return controller.validateRequiredField(value, label);
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildSerialNumberField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: _serialNumberController,
+        decoration: InputDecoration(
+          labelText: 'Serial Number',
+          prefixIcon: Icon(Icons.qr_code_outlined, color: Colors.blue[700]),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          filled: true,
+          fillColor: Colors.grey[50],
+        ),
+        onChanged: (value) => controller.updateFormData('serialNumber', value),
+        onSaved: (value) => controller.updateFormData('serialNumber', value),
+        validator: (value) =>
+            controller.validateRequiredField(value, 'Serial Number'),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:list/controllers/loan_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:list/pages/loan_detail_page.dart';
+import 'package:list/utils/loan_serial_number_generator.dart';
 
 class AddLoanFormController extends GetxController {
   final LoanController _loanController = Get.find<LoanController>();
@@ -15,13 +16,28 @@ class AddLoanFormController extends GetxController {
   final selectedNepaliDate = NepaliDate.today().obs;
   final useCustomDate = false.obs;
   bool isAddingForExistingCustomer = false;
+  String _lastGeneratedSerial = '';
 
   void updateFormData(String key, dynamic value) {
     formData[key] = value;
 
     if (key == 'name' && value != null && value.toString().isNotEmpty) {
+      _updateDefaultSerialNumber(value.toString());
       _checkForLoanReissue(value.toString());
     }
+  }
+
+  void _updateDefaultSerialNumber(String customerName) {
+    final currentSerial = formData['serialNumber']?.toString() ?? '';
+    if (currentSerial.isNotEmpty && currentSerial != _lastGeneratedSerial) {
+      return;
+    }
+    final generated = LoanSerialNumberGenerator.generate(
+      customerName: customerName,
+      existingLoans: _loanController.loans,
+    );
+    _lastGeneratedSerial = generated;
+    formData['serialNumber'] = generated;
   }
 
   void preFillFromArguments(Map<String, dynamic> arguments) {
@@ -30,7 +46,7 @@ class AddLoanFormController extends GetxController {
     formData['name'] = arguments['customerName'];
     formData['phone'] = arguments['phone'];
     formData['address'] = arguments['address'];
-    formData['serialNumber'] = arguments['serialNumber'];
+    _updateDefaultSerialNumber(arguments['customerName']?.toString() ?? '');
 
     // Don't show reissue info since we're adding for existing customer
     showingReissueInfo.value = false;
@@ -48,8 +64,6 @@ class AddLoanFormController extends GetxController {
       formData['address'] = collateralInfo['address'];
       formData['type'] = collateralInfo['type'];
       formData['jewelleryName'] = collateralInfo['jewelleryName'];
-      formData['serialNumber'] = collateralInfo['serialNumber'];
-
       showingReissueInfo.value = false;
       _showSuccessSnackbar('Previous loan information auto-filled');
     }
@@ -94,9 +108,6 @@ class AddLoanFormController extends GetxController {
   }
 
   void saveFormData() {
-    print('🔧 Saving form data...');
-    print('🔧 Current formData before save: $formData');
-
     // Store customer data before form save (in case disabled fields don't save)
     String? originalName = formData['name']?.toString();
     String? originalPhone = formData['phone']?.toString();
@@ -106,8 +117,6 @@ class AddLoanFormController extends GetxController {
 
     // Ensure pre-filled customer data is preserved for existing customers
     if (isAddingForExistingCustomer) {
-      print('🔧 Preserving customer data for existing customer...');
-
       // Restore customer data if it was lost during form save
       if (originalName != null && originalName.isNotEmpty) {
         formData['name'] = originalName;
@@ -118,8 +127,6 @@ class AddLoanFormController extends GetxController {
       if (originalAddress != null && originalAddress.isNotEmpty) {
         formData['address'] = originalAddress;
       }
-
-      print('🔧 FormData after save and restore: $formData');
     }
   }
 
@@ -134,7 +141,6 @@ class AddLoanFormController extends GetxController {
     bool success = false;
 
     try {
-
       if (!_validateAllRequiredFields()) {
         _showErrorSnackbar('Please fill in all required fields');
         return false;
@@ -146,15 +152,14 @@ class AddLoanFormController extends GetxController {
         return false;
       }
 
-      _loanController.addLoan(loan);
-      success = true; // Set success to true after successful loan addition
+      success = _loanController.addLoan(loan);
+      if (!success) return false;
 
       // Navigate to the loan detail page of the newly created loan
       Get.off(() => LoanDetailPage(loan: loan));
       // Show success message
       _showSuccessSnackbar('Loan added successfully!');
-    } catch (e, stack) {
-      print("Error while adding loan: $e\n$stack");
+    } catch (e) {
       _showErrorSnackbar('Failed to add loan. Please try again.');
       success = false;
     } finally {
@@ -202,7 +207,6 @@ class AddLoanFormController extends GetxController {
       final amountGiven = double.tryParse(amountStr);
 
       if (interestRate == null || amountGiven == null) {
-        print('🔧 Loan creation failed: Invalid interest rate or amount');
         return null;
       }
 
@@ -216,11 +220,8 @@ class AddLoanFormController extends GetxController {
           (customerName.isEmpty ||
               customerPhone.isEmpty ||
               customerAddress.isEmpty)) {
-      
         return null;
       }
-
-
 
       // Use a default duration of 365 days (1 year) since we're now calculating daily interest
       // The actual interest calculation will be based on actual days passed
@@ -238,7 +239,6 @@ class AddLoanFormController extends GetxController {
         amountGiven: amountGiven,
       );
     } catch (e) {
-      print("Loan creation failed: $e");
       return null;
     }
   }
@@ -314,7 +314,6 @@ class AddLoanFormController extends GetxController {
         );
       }
     } catch (e) {
-      print('Navigation error: $e');
       // Fallback: just show success message
       _showSuccessSnackbar('Loan added successfully!');
     }
