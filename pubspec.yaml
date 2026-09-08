@@ -27,6 +27,7 @@ dependencies:
   nepali_utils: ^3.0.8
   nepali_date_picker: ^6.0.2
   file_selector: ^0.9.3+3
+  window_manager: ^0.5.2
 
 dev_dependencies:
   build_runner: ^2.5.4

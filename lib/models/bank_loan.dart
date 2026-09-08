@@ -23,5 +23,4 @@ class BankLoan extends HiveObject {
     required this.depositDate,
     this.status = 'active',
   });
-
 }

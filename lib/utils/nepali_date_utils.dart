@@ -35,7 +35,6 @@ class NepaliDate {
         day: pickerNow.day,
       );
     } catch (e) {
-      print('ERROR in picker.NepaliDateTime.now(): $e');
       // Fallback to nepali_utils with explicit local time handling
       try {
         // Get local DateTime and ensure it's in local timezone (not UTC)
@@ -59,7 +58,6 @@ class NepaliDate {
           day: nepaliDate.day,
         );
       } catch (e2) {
-        print('ERROR in NepaliDateTime.fromDateTime fallback: $e2');
         // Final fallback: try NepaliDateTime.now() directly
         try {
           final nepaliNow = NepaliDateTime.now();
@@ -69,7 +67,6 @@ class NepaliDate {
             day: nepaliNow.day,
           );
         } catch (e3) {
-          print('ERROR in NepaliDateTime.now() final fallback: $e3');
           // Ultimate fallback to hardcoded date
           calculatedDate = NepaliDate(year: 2080, month: 7, day: 23);
         }

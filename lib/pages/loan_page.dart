@@ -15,7 +15,6 @@ import 'package:list/widgets/no_results_widget.dart';
 import 'package:list/widgets/floating_action_buttons_widget.dart';
 import 'package:list/widgets/customer_loan_tabs.dart';
 import 'package:list/controllers/bank_loan_controller.dart';
-import 'package:list/utils/nepali_date_utils.dart';
 
 class LoanHomePage extends StatefulWidget {
   const LoanHomePage({super.key});
@@ -39,9 +38,6 @@ class _LoanHomePageState extends State<LoanHomePage>
   @override
   void initState() {
     super.initState();
-    print('=== LOAN PAGE INITIALIZED ===');
-    print('Current local time: ${DateTime.now()}');
-    print('Nepali date: ${NepaliDate.today().format()}');
     WidgetsBinding.instance.addObserver(this);
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),

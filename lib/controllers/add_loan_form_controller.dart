@@ -108,9 +108,6 @@ class AddLoanFormController extends GetxController {
   }
 
   void saveFormData() {
-    print('🔧 Saving form data...');
-    print('🔧 Current formData before save: $formData');
-
     // Store customer data before form save (in case disabled fields don't save)
     String? originalName = formData['name']?.toString();
     String? originalPhone = formData['phone']?.toString();
@@ -120,8 +117,6 @@ class AddLoanFormController extends GetxController {
 
     // Ensure pre-filled customer data is preserved for existing customers
     if (isAddingForExistingCustomer) {
-      print('🔧 Preserving customer data for existing customer...');
-
       // Restore customer data if it was lost during form save
       if (originalName != null && originalName.isNotEmpty) {
         formData['name'] = originalName;
@@ -132,8 +127,6 @@ class AddLoanFormController extends GetxController {
       if (originalAddress != null && originalAddress.isNotEmpty) {
         formData['address'] = originalAddress;
       }
-
-      print('🔧 FormData after save and restore: $formData');
     }
   }
 
@@ -166,8 +159,7 @@ class AddLoanFormController extends GetxController {
       Get.off(() => LoanDetailPage(loan: loan));
       // Show success message
       _showSuccessSnackbar('Loan added successfully!');
-    } catch (e, stack) {
-      print("Error while adding loan: $e\n$stack");
+    } catch (e) {
       _showErrorSnackbar('Failed to add loan. Please try again.');
       success = false;
     } finally {
@@ -215,7 +207,6 @@ class AddLoanFormController extends GetxController {
       final amountGiven = double.tryParse(amountStr);
 
       if (interestRate == null || amountGiven == null) {
-        print('🔧 Loan creation failed: Invalid interest rate or amount');
         return null;
       }
 
@@ -248,7 +239,6 @@ class AddLoanFormController extends GetxController {
         amountGiven: amountGiven,
       );
     } catch (e) {
-      print("Loan creation failed: $e");
       return null;
     }
   }
@@ -324,7 +314,6 @@ class AddLoanFormController extends GetxController {
         );
       }
     } catch (e) {
-      print('Navigation error: $e');
       // Fallback: just show success message
       _showSuccessSnackbar('Loan added successfully!');
     }

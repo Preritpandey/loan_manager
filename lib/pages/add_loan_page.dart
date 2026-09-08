@@ -36,14 +36,13 @@ class _AddLoanPageState extends State<AddLoanPage> {
     // Check for arguments passed from Customer Loans Page
     final arguments = Get.arguments as Map<String, dynamic>?;
     if (arguments != null) {
-      print('🔧 AddLoanPage received arguments: $arguments');
       isAddingForExistingCustomer = true;
       // Pre-fill form with customer information
       WidgetsBinding.instance.addPostFrameCallback((_) {
         controller.preFillFromArguments(arguments);
       });
     } else {
-      print('🔧 AddLoanPage: No arguments received - creating new customer');
+      isAddingForExistingCustomer = false;
     }
   }
 
@@ -400,14 +399,6 @@ class _AddLoanPageState extends State<AddLoanPage> {
             // If field is disabled and value is null, use the existing formData value
             final finalValue = value ?? controller.formData[key];
             controller.updateFormData(key, finalValue);
-
-            // Debug logging for form saving
-            if (isAddingForExistingCustomer &&
-                (key == 'name' || key == 'phone' || key == 'address')) {
-              print(
-                '🔧 Form saving - Key: $key, Value: $value, FinalValue: $finalValue',
-              );
-            }
           },
           onChanged: (value) {
             // For disabled fields, ensure the value is preserved

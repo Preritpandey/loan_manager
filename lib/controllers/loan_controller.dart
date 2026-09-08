@@ -228,7 +228,6 @@ class LoanController extends GetxController {
           _showSnackbar('Cancelled', 'Save operation was cancelled');
         }
       } catch (e) {
-        print('Error saving file: $e');
         
         // Fallback to default location if file picker fails
         try {
@@ -249,7 +248,6 @@ class LoanController extends GetxController {
           
           _showSnackbar('Success', 'Today\'s report saved to default location');
         } catch (e) {
-          print('Error saving to default location: $e');
           _showSnackbar('Error', 'Failed to save today\'s report: $e');
         }
       }
@@ -360,13 +358,7 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
       isSearchActive.value = false;
       hasExplicitSearch.value = false;
-
-    
-
-      // Verify customer grouping
-      verifyCustomerGrouping();
     } catch (e) {
-      print('Error loading loans: $e');
       _showSnackbar('Error', 'Failed to load loans');
     } finally {
       isLoading.value = false;
@@ -411,7 +403,6 @@ class LoanController extends GetxController {
       _showSnackbar('Success', 'Loan added successfully');
       
     } catch (e) {
-      print('Error adding loan: $e');
       _showSnackbar('Error', 'Failed to add loan');
     }
   }
@@ -430,7 +421,6 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
       _showSnackbar('Success', 'Amount updated successfully');
     } catch (e) {
-      print('Error updating amount: $e');
       _showSnackbar('Error', 'Failed to update amount');
     }
   }
@@ -454,7 +444,6 @@ class LoanController extends GetxController {
       // Force UI update
       update();
     } catch (e) {
-      print('Error updating amount by serial: $e');
       _showSnackbar('Error', 'Failed to update amount');
     }
   }
@@ -476,7 +465,6 @@ class LoanController extends GetxController {
       // Force UI update
       update();
     } catch (e) {
-      print('Error updating amount by loan ID: $e');
       _showSnackbar('Error', 'Failed to update amount');
     }
   }
@@ -598,7 +586,6 @@ class LoanController extends GetxController {
       loans[loanIndex] = loan;
       filteredLoans.value = loans;
     } catch (e) {
-      print('Error adding partial repayment: $e');
       _showSnackbar('Error', 'Failed to add partial repayment');
     }
   }
@@ -690,7 +677,6 @@ class LoanController extends GetxController {
       // Notify all listeners, especially the loan summary
       update(['loan_summary']);
     } catch (e) {
-      print('Error adding partial repayment (settlement): $e');
       _showSnackbar('Error', 'Failed to add partial repayment');
     }
   }
@@ -728,7 +714,6 @@ class LoanController extends GetxController {
       filteredLoans.value = loans;
       refreshLoanCalculations();
     } catch (e) {
-      print('Error adding top up: $e');
       _showSnackbar('Error', 'Failed to add top-up');
     }
   }
@@ -793,7 +778,6 @@ class LoanController extends GetxController {
       _showSnackbar('Success', 'Interest rate updated successfully');
       return change;
     } catch (e) {
-      print('Error changing interest rate: $e');
       _showSnackbar('Error', 'Failed to update interest rate');
       return null;
     }
@@ -817,7 +801,7 @@ class LoanController extends GetxController {
         );
       });
     } catch (e) {
-      print('Error showing snackbar: $e');
+      // Snackbar failures are non-fatal; ignore.
     }
   }
 
@@ -829,7 +813,6 @@ class LoanController extends GetxController {
       );
       return loan.partialRepayments;
     } catch (e) {
-      print('Error getting partial repayments: $e');
       return [];
     }
   }
@@ -880,7 +863,6 @@ class LoanController extends GetxController {
       // Limit suggestions to 10 items and sort
       searchSuggestions.value = suggestions.take(10).toList()..sort();
     } catch (e) {
-      print('Error generating search suggestions: $e');
       searchSuggestions.clear();
     }
   }
@@ -914,7 +896,6 @@ class LoanController extends GetxController {
         generateSearchSuggestions(query);
       }
     } catch (e) {
-      print('Error searching loans: $e');
       filteredLoans.value = loans;
     }
   }
@@ -973,7 +954,6 @@ class LoanController extends GetxController {
 
       // Note: Success snackbar will be shown by the calling controller
     } catch (e) {
-      print('Error deleting loan: $e');
       _showSnackbar('Error', 'Failed to delete loan');
     }
   }
@@ -1000,7 +980,6 @@ class LoanController extends GetxController {
       final sortedNames = customerNames.toList()..sort();
       return sortedNames;
     } catch (e) {
-      print('Error getting customer names: $e');
       return [];
     }
   }
@@ -1015,7 +994,6 @@ class LoanController extends GetxController {
       customerLoans.sort((a, b) => b.date.compareTo(a.date));
       return customerLoans.first;
     } catch (e) {
-      print('Error getting most recent loan: $e');
       return null;
     }
   }
@@ -1034,7 +1012,6 @@ class LoanController extends GetxController {
         'phone': recentLoan.phone,
       };
     } catch (e) {
-      print('Error getting collateral info: $e');
       return null;
     }
   }
@@ -1048,7 +1025,6 @@ class LoanController extends GetxController {
           )
           .toList();
     } catch (e) {
-      print('Error getting loans by customer: $e');
       return [];
     }
   }
@@ -1080,7 +1056,6 @@ class LoanController extends GetxController {
       }
       return groupedLoans;
     } catch (e) {
-      print('Error grouping loans: $e');
       return {};
     }
   }
@@ -1090,7 +1065,6 @@ class LoanController extends GetxController {
       final customerLoans = getLoansByCustomerName(customerName);
       return customerLoans.fold(0.0, (sum, loan) => sum + loan.dueAmount);
     } catch (e) {
-      print('Error calculating total due: $e');
       return 0.0;
     }
   }
@@ -1103,7 +1077,6 @@ class LoanController extends GetxController {
         (sum, loan) => sum + loan.compoundInterest,
       );
     } catch (e) {
-      print('Error calculating compound interest: $e');
       return 0.0;
     }
   }
@@ -1116,7 +1089,6 @@ class LoanController extends GetxController {
         (sum, loan) => sum + loan.agreedPeriodInterest,
       );
     } catch (e) {
-      print('Error calculating fixed interest: $e');
       return 0.0;
     }
   }
@@ -1129,7 +1101,6 @@ class LoanController extends GetxController {
         (sum, loan) => sum + loan.immediateTotalDue,
       );
     } catch (e) {
-      print('Error calculating immediate due: $e');
       return 0.0;
     }
   }
@@ -1139,7 +1110,6 @@ class LoanController extends GetxController {
       final customerLoans = getLoansByCustomerName(customerName);
       return customerLoans.fold(0.0, (sum, loan) => sum + loan.overdueInterest);
     } catch (e) {
-      print('Error calculating overdue interest: $e');
       return 0.0;
     }
   }
@@ -1149,7 +1119,6 @@ class LoanController extends GetxController {
       final customerLoans = getLoansByCustomerName(customerName);
       return customerLoans.fold(0, (sum, loan) => sum + loan.overdueDays);
     } catch (e) {
-      print('Error calculating overdue days: $e');
       return 0;
     }
   }
@@ -1159,7 +1128,6 @@ class LoanController extends GetxController {
       final customerLoans = getLoansByCustomerName(customerName);
       return customerLoans.any((loan) => loan.isOverdue);
     } catch (e) {
-      print('Error checking overdue status: $e');
       return false;
     }
   }
@@ -1172,7 +1140,6 @@ class LoanController extends GetxController {
       );
       return loanIndex != -1 ? loans[loanIndex] : null;
     } catch (e) {
-      print('Error getting loan by serial: $e');
       return null;
     }
   }
@@ -1183,7 +1150,6 @@ class LoanController extends GetxController {
       final loanIndex = loans.indexWhere((loan) => loan.loanId == loanId);
       return loanIndex != -1 ? loans[loanIndex] : null;
     } catch (e) {
-      print('Error getting loan by loan ID: $e');
       return null;
     }
   }
@@ -1194,7 +1160,6 @@ class LoanController extends GetxController {
       // Use remainingPrincipal instead of amountGiven to account for principal repayments
       return loans.fold(0.0, (sum, loan) => sum + loan.remainingPrincipal);
     } catch (e) {
-      print('Error calculating total loans amount: $e');
       return 0.0;
     }
   }
@@ -1203,7 +1168,6 @@ class LoanController extends GetxController {
     try {
       return loans.fold(0.0, (sum, loan) => sum + loan.amountReceived);
     } catch (e) {
-      print('Error calculating total received amount: $e');
       return 0.0;
     }
   }
@@ -1212,7 +1176,6 @@ class LoanController extends GetxController {
     try {
       return loans.fold(0.0, (sum, loan) => sum + loan.dueAmount);
     } catch (e) {
-      print('Error calculating total due amount: $e');
       return 0.0;
     }
   }
@@ -1221,7 +1184,6 @@ class LoanController extends GetxController {
     try {
       return loans.fold(0.0, (sum, loan) => sum + loan.remainingPrincipalAt(DateTime.now()));
     } catch (e) {
-      print('Error calculating total principal due: $e');
       return 0.0;
     }
   }
@@ -1230,7 +1192,6 @@ class LoanController extends GetxController {
     try {
       return loans.fold(0.0, (sum, loan) => sum + (loan.dueAmount - loan.remainingPrincipalAt(DateTime.now())));
     } catch (e) {
-      print('Error calculating total interest due: $e');
       return 0.0;
     }
   }
@@ -1243,7 +1204,6 @@ class LoanController extends GetxController {
     try {
       return loans.where((loan) => loan.isOverdue).length;
     } catch (e) {
-      print('Error counting overdue loans: $e');
       return 0;
     }
   }
@@ -1253,7 +1213,6 @@ class LoanController extends GetxController {
     try {
       return loans.where((loan) => loan.isOverdue).toList();
     } catch (e) {
-      print('Error getting overdue loans: $e');
       return [];
     }
   }
@@ -1266,7 +1225,7 @@ class LoanController extends GetxController {
       loans.value = currentLoans;
       filteredLoans.value = currentLoans;
     } catch (e) {
-      print('Error refreshing loan calculations: $e');
+      // Refresh failures are non-fatal; ignore.
     }
   }
 
@@ -1304,7 +1263,6 @@ class LoanController extends GetxController {
       }
       return null;
     } catch (e) {
-      print('Error getting updated loan: $e');
       return null;
     }
   }
@@ -1314,7 +1272,6 @@ class LoanController extends GetxController {
     try {
       return loan.outstandingDueAt(DateTime.now(), forSettlement: true);
     } catch (e) {
-      print('Error calculating early repayment amount: $e');
       return loan.dueAmount;
     }
   }
@@ -1325,7 +1282,6 @@ class LoanController extends GetxController {
       // Interest due is compoundInterest under our model
       return loan.compoundInterest;
     } catch (e) {
-      print('Error calculating early repayment interest: $e');
       return loan.agreedPeriodInterest;
     }
   }
@@ -1335,7 +1291,6 @@ class LoanController extends GetxController {
     try {
       return calculateEarlyRepaymentAmount(loan);
     } catch (e) {
-      print('Error calculating early repayment due amount: $e');
       return loan.dueAmount;
     }
   }
@@ -1349,69 +1304,14 @@ class LoanController extends GetxController {
         (sum, loan) => sum + calculateEarlyRepaymentAmount(loan),
       );
     } catch (e) {
-      print('Error calculating total early repayment amount: $e');
       return 0.0;
     }
   }
 
 
-  // Method to verify and fix customer grouping issues
-  void verifyCustomerGrouping() {
-    print('\n=== CUSTOMER GROUPING VERIFICATION ===');
-
-    // Get all unique customer names
-    final allCustomerNames = <String>{};
-    final nameVariations = <String, List<String>>{};
-
-    for (final loan in loans) {
-      final name = loan.name.trim();
-      final normalizedName = name.toLowerCase();
-
-      allCustomerNames.add(name);
-
-      // Track variations of the same name
-      if (nameVariations.containsKey(normalizedName)) {
-        if (!nameVariations[normalizedName]!.contains(name)) {
-          nameVariations[normalizedName]!.add(name);
-        }
-      } else {
-        nameVariations[normalizedName] = [name];
-      }
-    }
-
-    print('Total unique names (case-sensitive): ${allCustomerNames.length}');
-    print('Total unique names (case-insensitive): ${nameVariations.length}');
-
-    // Check for name variations that should be grouped
-    nameVariations.forEach((normalizedName, variations) {
-      if (variations.length > 1) {
-        print('⚠️  Name variations found for "$normalizedName":');
-        for (final variation in variations) {
-          print('    - "$variation"');
-        }
-      }
-    });
-
-    // Test grouping function
-    final groupedLoans = getLoansGroupedByCustomer();
-    print('\nGrouping Results:');
-    print('Customers after grouping: ${groupedLoans.length}');
-
-    groupedLoans.forEach((customerName, customerLoans) {
-      print('Customer: "$customerName" (${customerLoans.length} loans)');
-      for (final loan in customerLoans) {
-        print(
-          '  - Serial: "${loan.serialNumber}" | Jewellery: "${loan.jewelleryName}"',
-        );
-      }
-    });
-
-    print('========================\n');
-  }
 
   // Method to clean up customer names (normalize them)
   void normalizeCustomerNames() {
-    print('\n=== NORMALIZING CUSTOMER NAMES ===');
 
     bool hasChanges = false;
     final nameMapping = <String, String>{};
@@ -1450,7 +1350,6 @@ class LoanController extends GetxController {
       final currentName = loan.name.trim();
       if (nameMapping.containsKey(currentName)) {
         final newName = nameMapping[currentName]!;
-        print('Normalizing: "$currentName" → "$newName"');
         loan.name = newName;
         loan.save();
         hasChanges = true;
@@ -1458,14 +1357,11 @@ class LoanController extends GetxController {
     }
 
     if (hasChanges) {
-      print('✅ Customer names normalized successfully');
       // Reload loans to reflect changes
       loadLoans();
     } else {
-      print('✅ No name normalization needed');
     }
 
-    print('========================\n');
   }
 
   // Helper method to request appropriate storage permissions
@@ -1506,7 +1402,6 @@ class LoanController extends GetxController {
         return status.isGranted;
       }
     } catch (e) {
-      print('Error requesting storage permissions: $e');
       return false;
     }
   }
@@ -1685,7 +1580,6 @@ class LoanController extends GetxController {
           _showSnackbar('Cancelled', 'Save operation was cancelled');
         }
       } catch (e) {
-        print('Error saving file: $e');
         
         // Fallback to default location if file picker fails
         try {
@@ -1706,12 +1600,10 @@ class LoanController extends GetxController {
           
           _showSnackbar('Success', 'PDF saved to default location');
         } catch (e) {
-          print('Error saving to default location: $e');
           _showSnackbar('Error', 'Failed to save PDF: $e');
         }
       }
     } catch (e) {
-      print('Error exporting PDF: $e');
       _showSnackbar('Error', 'Failed to export PDF: $e');
     } finally {
       isLoading.value = false;
@@ -2199,7 +2091,6 @@ class LoanController extends GetxController {
           output = await getApplicationDocumentsDirectory();
         }
       } catch (e) {
-        print('Error getting storage directory: $e');
         output = await getTemporaryDirectory();
       }
 
@@ -2213,7 +2104,6 @@ class LoanController extends GetxController {
 
       _showSnackbar('Success', 'Customer PDF exported successfully and opened');
     } catch (e) {
-      print('Error exporting customer PDF: $e');
       _showSnackbar('Error', 'Failed to export customer PDF: $e');
     } finally {
       isLoading.value = false;
