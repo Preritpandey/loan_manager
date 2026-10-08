@@ -3,6 +3,9 @@ import 'package:nepali_date_picker/nepali_date_picker.dart' as picker;
 
 /// Utility class for working with Nepali (Bikram Sambat) dates
 class NepaliDate {
+  static const int pickerFirstYear = 2072;
+  static const int pickerLastYear = 2200;
+
   final int year;
   final int month;
   final int day;
@@ -148,6 +151,19 @@ class NepaliDate {
     }
   }
 
+  /// Add whole Nepali years while preserving month/day where possible.
+  NepaliDate addYears(int years) {
+    final targetYear = year + years;
+    var targetDay = day;
+    while (targetDay > 0) {
+      if (isValid(targetYear, month, targetDay)) {
+        return NepaliDate(year: targetYear, month: month, day: targetDay);
+      }
+      targetDay--;
+    }
+    return NepaliDate(year: targetYear, month: month, day: 1);
+  }
+
   // --- CONVERSIONS ---
 
   /// Convert NepaliDate to Gregorian (AD) DateTime (normalized to Y-M-D)
@@ -232,7 +248,7 @@ class NepaliDate {
   static int? getMonthNumber(String monthName) => _getMonthNumber(monthName);
 
   static bool isValid(int year, int month, int day) {
-    if (year < 1970 || year > 2200) return false;
+    if (year < 1970 || year > pickerLastYear) return false;
     if (month < 1 || month > 12) return false;
     if (day < 1 || day > 32) return false;
     try {
@@ -249,9 +265,12 @@ class NepaliDate {
 
   static List<int> getYears() {
     final current = getCurrentYear();
-    const past = 3;
     const future = 7;
-    return List.generate(past + future + 1, (i) => current - past + i);
+    final lastYear = current + future;
+    return List.generate(
+      lastYear - pickerFirstYear + 1,
+      (i) => pickerFirstYear + i,
+    );
   }
 
   // --- DATE DIFFERENCE HELPERS ---

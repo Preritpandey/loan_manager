@@ -10,7 +10,6 @@ import 'package:file_selector/file_selector.dart';
 import 'dart:io';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:list/models/loan_event.dart';
-import 'package:list/utils/loan_serial_number_generator.dart';
 
 class LoanController extends GetxController {
   final Box<Loan> loanBox = Hive.box<Loan>('loans');
@@ -368,21 +367,6 @@ class LoanController extends GetxController {
 
   bool addLoan(Loan loan) {
     try {
-      if (LoanSerialNumberGenerator.shouldAutoReplaceSerial(
-        serialNumber: loan.serialNumber,
-        customerName: loan.name,
-        existingLoans: loans,
-      )) {
-        final generatedSerial = LoanSerialNumberGenerator.generate(
-          customerName: loan.name,
-          borrowerName: loan.name,
-          existingLoans: loans,
-        );
-        if (generatedSerial.isNotEmpty) {
-          loan.serialNumber = generatedSerial;
-        }
-      }
-
       if (loan.serialNumber.trim().isEmpty) {
         _showSnackbar('Error', 'Serial number is required');
         return false;

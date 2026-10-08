@@ -19,17 +19,28 @@ void main() async {
   }
 
   await Hive.initFlutter();
-  Hive.registerAdapter(LoanAdapter());
-  Hive.registerAdapter(PartialRepaymentAdapter());
-  Hive.registerAdapter(InterestRateChangeAdapter());
-  Hive.registerAdapter(BankLoanAdapter());
+  if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(LoanAdapter());
+  if (!Hive.isAdapterRegistered(1)) {
+    Hive.registerAdapter(PartialRepaymentAdapter());
+  }
+  if (!Hive.isAdapterRegistered(5)) {
+    Hive.registerAdapter(InterestRateChangeAdapter());
+  }
+  if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(BankLoanAdapter());
   await Hive.openBox<Loan>('loans');
   // Register and open deposits boxes
-  Hive.registerAdapter(DepositModelAdapter());
-  Hive.registerAdapter(DepositTransactionAdapter());
+  if (!Hive.isAdapterRegistered(11)) {
+    Hive.registerAdapter(CashDepositLotAdapter());
+  }
+  if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(DepositModelAdapter());
+  if (!Hive.isAdapterRegistered(3)) {
+    Hive.registerAdapter(DepositTransactionAdapter());
+  }
   await Hive.openBox<DepositModel>('deposits');
   // Register and open events box
-  Hive.registerAdapter(LoanPerformedEventAdapter());
+  if (!Hive.isAdapterRegistered(4)) {
+    Hive.registerAdapter(LoanPerformedEventAdapter());
+  }
   await Hive.openBox<LoanPerformedEvent>('events');
 
   // Request storage permission on app startup

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
-import 'package:list/controllers/backup_controller.dart';
+// OFFLINE MODE: First-run Google Drive/rclone backup identity setup disabled.
+// import 'package:list/controllers/backup_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/loan_app_bar.dart';
 import 'package:list/widgets/search_bar_widget.dart';
@@ -32,7 +33,8 @@ class _LoanHomePageState extends State<LoanHomePage>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _showSuggestions = false;
-  bool _didAskBackupIdentity = false;
+  // OFFLINE MODE: First-run backup folder/name prompt disabled.
+  // bool _didAskBackupIdentity = false;
   CustomerLoanTab _selectedCustomerLoanTab = CustomerLoanTab.individual;
 
   @override
@@ -50,10 +52,14 @@ class _LoanHomePageState extends State<LoanHomePage>
 
     // Initialize BankLoanController
     Get.put(BankLoanController());
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _askForBackupIdentity(),
-    );
+    // OFFLINE MODE: Do not ask for a backup folder/name on first launch.
+    // WidgetsBinding.instance.addPostFrameCallback(
+    //   (_) => _askForBackupIdentity(),
+    // );
   }
+
+  /*
+  OFFLINE MODE: First-run backup folder/name setup disabled for now.
 
   Future<void> _askForBackupIdentity() async {
     if (_didAskBackupIdentity) {
@@ -69,6 +75,7 @@ class _LoanHomePageState extends State<LoanHomePage>
     }
     await showBackupIdentityDialog(context, backupController);
   }
+  */
 
   @override
   void dispose() {

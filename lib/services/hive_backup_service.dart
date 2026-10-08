@@ -59,6 +59,13 @@ class HiveBackupService {
   static const Set<String> _allowedExtensions = {'.hive', '.hivec'};
 
   Future<BackupResult> testConnection(BackupConfig config) async {
+    // OFFLINE MODE: Google Drive/rclone connection testing disabled for now.
+    return const BackupResult(
+      success: false,
+      message: 'Cloud backup is disabled in offline mode.',
+    );
+
+    /*
     final ProcessResult executableResult;
     try {
       executableResult = await _runRclone(config, ['version']);
@@ -93,6 +100,7 @@ class HiveBackupService {
       success: true,
       message: 'Google Drive connection OK.',
     );
+    */
   }
 
   Future<String> createUniqueBackupId({
@@ -100,6 +108,11 @@ class HiveBackupService {
     required BackupConfig config,
   }) async {
     final normalized = normalizeBackupName(displayName);
+
+    // OFFLINE MODE: Google Drive/rclone folder-name lookup disabled for now.
+    return '${normalized}01';
+
+    /*
     final remoteBase = _remotePath(config, '');
     final result = await _runRclone(config, ['lsf', remoteBase, '--dirs-only']);
     final existing = <String>{};
@@ -122,6 +135,7 @@ class HiveBackupService {
     }
 
     throw BackupException('Unable to allocate a backup ID for $displayName.');
+    */
   }
 
   Future<BackupResult> runBackup({
@@ -419,14 +433,18 @@ class HiveBackupService {
   }
 
   Future<ProcessResult> _runRclone(BackupConfig config, List<String> args) {
-    final fullArgs = <String>[
-      if (config.rcloneConfigPath.trim().isNotEmpty) ...[
-        '--config',
-        config.rcloneConfigPath.trim(),
-      ],
-      ...args,
-    ];
-    return Process.run(config.rcloneExecutablePath.trim(), fullArgs);
+    // OFFLINE MODE: Do not execute rclone while the app is local-only.
+    // final fullArgs = <String>[
+    //   if (config.rcloneConfigPath.trim().isNotEmpty) ...[
+    //     '--config',
+    //     config.rcloneConfigPath.trim(),
+    //   ],
+    //   ...args,
+    // ];
+    // return Process.run(config.rcloneExecutablePath.trim(), fullArgs);
+    return Future.value(
+      ProcessResult(0, 1, '', 'rclone disabled in offline mode.'),
+    );
   }
 
   String _remotePath(BackupConfig config, String childPath) {

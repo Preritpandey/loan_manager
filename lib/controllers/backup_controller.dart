@@ -8,7 +8,7 @@ import 'package:list/services/hive_backup_service.dart';
 
 class BackupController extends GetxController {
   BackupController({HiveBackupService? service})
-      : _service = service ?? HiveBackupService();
+    : _service = service ?? HiveBackupService();
 
   static const _displayNameKey = 'backup_display_name';
   static const _backupIdKey = 'backup_id';
@@ -56,13 +56,17 @@ class BackupController extends GetxController {
       rcloneConfigPath:
           prefs.getString(_rcloneConfigKey) ??
           BackupConfig.defaults.rcloneConfigPath,
-      remoteName: prefs.getString(_remoteNameKey) ?? BackupConfig.defaults.remoteName,
+      remoteName:
+          prefs.getString(_remoteNameKey) ?? BackupConfig.defaults.remoteName,
       driveRootFolder:
-          prefs.getString(_driveRootKey) ?? BackupConfig.defaults.driveRootFolder,
+          prefs.getString(_driveRootKey) ??
+          BackupConfig.defaults.driveRootFolder,
       autoIntervalMinutes:
-          prefs.getInt(_autoIntervalKey) ?? BackupConfig.defaults.autoIntervalMinutes,
+          prefs.getInt(_autoIntervalKey) ??
+          BackupConfig.defaults.autoIntervalMinutes,
       scheduledTimes:
-          prefs.getStringList(_scheduledTimesKey) ?? BackupConfig.defaults.scheduledTimes,
+          prefs.getStringList(_scheduledTimesKey) ??
+          BackupConfig.defaults.scheduledTimes,
     );
     hasIdentity.value =
         displayName.value.isNotEmpty && backupId.value.isNotEmpty;
@@ -91,8 +95,9 @@ class BackupController extends GetxController {
     }
 
     isBusy.value = true;
-    statusMessage.value = 'Creating Google Drive backup identity...';
+    statusMessage.value = 'Creating local-only backup identity...';
     try {
+      // OFFLINE MODE: Service returns a local-only ID and skips rclone lookup.
       final id = await _service.createUniqueBackupId(
         displayName: trimmed,
         config: config,
@@ -103,7 +108,7 @@ class BackupController extends GetxController {
       displayName.value = trimmed;
       backupId.value = id;
       hasIdentity.value = true;
-      statusMessage.value = 'Backup identity created: $id';
+      statusMessage.value = 'Local-only backup identity created: $id';
       _restartSchedulers();
     } catch (e) {
       final fallback = '${HiveBackupService.normalizeBackupName(trimmed)}01';
@@ -123,11 +128,13 @@ class BackupController extends GetxController {
 
   Future<void> testConnection() async {
     isBusy.value = true;
-    statusMessage.value = 'Testing Google Drive connection...';
+    statusMessage.value = 'Cloud backup is disabled in offline mode.';
     try {
-      final result = await _service.testConnection(config);
-      isConnected.value = result.success;
-      statusMessage.value = result.message;
+      // OFFLINE MODE: Google Drive/rclone connection test disabled for now.
+      // final result = await _service.testConnection(config);
+      // isConnected.value = result.success;
+      // statusMessage.value = result.message;
+      isConnected.value = false;
     } finally {
       isBusy.value = false;
     }
@@ -142,6 +149,11 @@ class BackupController extends GetxController {
   }
 
   Future<bool> _runBackup(BackupKind kind) async {
+    // OFFLINE MODE: Cloud backups disabled for now.
+    statusMessage.value = 'Cloud backup is disabled in offline mode.';
+    return false;
+
+    /*
     if (!hasIdentity.value) {
       statusMessage.value = 'Set up your backup user first.';
       return false;
@@ -181,12 +193,17 @@ class BackupController extends GetxController {
       isBusy.value = false;
     }
     return success;
+    */
   }
 
   void _restartSchedulers() {
     _autoTimer?.cancel();
     _scheduledTimer?.cancel();
 
+    // OFFLINE MODE: Automatic and scheduled cloud backups disabled for now.
+    return;
+
+    /*
     if (!hasIdentity.value || !isInitialized.value) {
       return;
     }
@@ -202,8 +219,10 @@ class BackupController extends GetxController {
       (_) => _runDueScheduledBackup(),
     );
     _runDueScheduledBackup();
+    */
   }
 
+  // ignore: unused_element
   Future<void> _runDueScheduledBackup() async {
     if (isBusy.value) {
       return;

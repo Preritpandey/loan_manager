@@ -37,6 +37,15 @@ class CustomerTile extends StatelessWidget {
       0.0,
       (sum, loan) => sum + loan.dueAmount,
     );
+    final now = DateTime.now();
+    final totalDuePrincipal = customerLoans.fold(
+      0.0,
+      (sum, loan) => sum + loan.remainingPrincipalAt(now),
+    );
+    final totalDueInterest = (totalDue - totalDuePrincipal).clamp(
+      0.0,
+      double.infinity,
+    );
 
     // Theme color (requested red)
     final themeRed = const Color.fromARGB(255, 204, 21, 27);
@@ -182,6 +191,17 @@ class CustomerTile extends StatelessWidget {
                       label: 'Total Due',
                       value: 'NPR ${totalDue.toStringAsFixed(2)}',
                       color: totalDue > 0 ? Colors.red : Colors.green,
+
+                      detailRows: [
+                        _MetricDetail(
+                          label: 'Due Principal',
+                          value: 'NPR ${totalDuePrincipal.toStringAsFixed(2)}',
+                        ),
+                        _MetricDetail(
+                          label: 'Due Interest',
+                          value: 'NPR ${totalDueInterest.toStringAsFixed(2)}',
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -198,12 +218,13 @@ class CustomerTile extends StatelessWidget {
     required String label,
     required String value,
     required Color color,
+    List<_MetricDetail> detailRows = const [],
   }) {
     final width = MediaQuery.of(context).size.width;
     final isDesktopLike = width > 768 || GetPlatform.isDesktop;
     final double cardPadding = isDesktopLike ? 12 : 10;
-    final double labelSize = isDesktopLike ? 11 : 10;
-    final double valueSize = isDesktopLike ? 14 : 13;
+    final double labelSize = isDesktopLike ? 13.5 : 12.5;
+    final double valueSize = isDesktopLike ? 13.5 : 12.5;
 
     return Container(
       padding: EdgeInsets.all(cardPadding),
@@ -222,8 +243,67 @@ class CustomerTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (detailRows.isEmpty) ...[
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: labelSize,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: valueSize,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInlineMetric(
+                  label: label,
+                  value: value,
+                  color: color,
+                  labelSize: labelSize,
+                  valueSize: valueSize,
+                ),
+                for (final detail in detailRows) ...[
+                  const SizedBox(width: 8),
+                  _buildInlineMetric(
+                    label: detail.label,
+                    value: detail.value,
+                    color: color,
+                    labelSize: labelSize,
+                    valueSize: valueSize,
+                  ),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlineMetric({
+    required String label,
+    required String value,
+    required Color color,
+    required double labelSize,
+    required double valueSize,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: labelSize,
               color: Colors.grey[700],
@@ -233,10 +313,12 @@ class CustomerTile extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: valueSize,
-              fontWeight: FontWeight.w600,
               color: color,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -253,4 +335,11 @@ class CustomerTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MetricDetail {
+  final String label;
+  final String value;
+
+  const _MetricDetail({required this.label, required this.value});
 }

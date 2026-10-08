@@ -134,13 +134,13 @@ class LoanSummaryCard extends StatelessWidget {
                           ),
                           // Breakdown
                           _buildDetailRow(
-                            'Principal Due',
+                            'Due Principal',
                             totalPrincipalDue,
                             Colors.grey[800]!,
                           ),
                           const SizedBox(height: 2),
                           _buildDetailRow(
-                            'Interest Due',
+                            'Due Interest',
                             totalInterestDue,
                             Colors.orange[700]!,
                           ),

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:list/models/deposit.dart';
+import 'package:list/services/cash_deposit_interest_service.dart';
 import 'package:list/utils/nepali_date_utils.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
@@ -12,6 +13,8 @@ import 'package:list/models/loan_event.dart';
 
 class DepositController extends GetxController {
   final Box<DepositModel> depositBox = Hive.box<DepositModel>('deposits');
+  final CashDepositInterestService interestService =
+      CashDepositInterestService();
   final deposits = <DepositModel>[].obs;
   final filtered = <DepositModel>[].obs;
   final isLoading = false.obs;
@@ -26,7 +29,17 @@ class DepositController extends GetxController {
   void load() {
     try {
       isLoading.value = true;
-      deposits.value = depositBox.values.toList();
+      final loaded = depositBox.values.toList();
+      for (final deposit in loaded) {
+        final previousTransactionCount = deposit.transactions.length;
+        deposit.migrateLegacyTransactionsToLots();
+        interestService.processMaturedDeposits(deposit);
+        if (deposit.transactions.length != previousTransactionCount ||
+            deposit.lots.isNotEmpty) {
+          deposit.save();
+        }
+      }
+      deposits.value = loaded;
       filtered.value = deposits;
       isSearchActive.value = false;
     } catch (e) {
@@ -70,35 +83,30 @@ class DepositController extends GetxController {
         return;
       }
       final model = deposits[idx];
-      final prior = model.currentBalance;
-      double next = prior;
       if (type == 'Deposit') {
-        next = prior + amount;
+        model.addDepositLot(
+          amount: amount,
+          nepaliDateString: nepaliDate,
+          rate: model.interestRate,
+          description: description,
+        );
       } else if (type == 'Withdrawal') {
-        if (amount > prior) {
+        if (amount > model.totalPrincipal) {
           _snack(
             'Error',
-            'Withdrawal exceeds current balance (NPR ${prior.toStringAsFixed(2)})',
+            'Withdrawal exceeds principal (NPR ${model.totalPrincipal.toStringAsFixed(2)})',
           );
           return;
         }
-        next = prior - amount;
+        model.withdrawPrincipal(
+          amount: amount,
+          nepaliDateString: nepaliDate,
+          description: description,
+        );
       } else {
         _snack('Error', 'Invalid transaction type');
         return;
       }
-
-      final txn = DepositTransaction(
-        type: type,
-        amount: amount,
-        dateNepali: nepaliDate,
-        description: description,
-        balanceAfter: next,
-        dateAD: NepaliDate.parse(nepaliDate)?.toGregorian(),
-      );
-
-      model.transactions = List<DepositTransaction>.from(model.transactions)
-        ..add(txn);
       model.save();
       // Record performed event for strict 'performed today' logic
       try {
@@ -108,7 +116,8 @@ class DepositController extends GetxController {
           serialNumber: '',
           type: type.toLowerCase() == 'withdrawal' ? 'withdrawal' : 'deposit',
           amount: amount,
-          recordedDate: txn.dateAD ?? DateTime.now(),
+          recordedDate:
+              NepaliDate.parse(nepaliDate)?.toGregorian() ?? DateTime.now(),
           description: description ?? type,
         );
         box.add(ev);
@@ -118,6 +127,105 @@ class DepositController extends GetxController {
       _snack('Success', '$type recorded');
     } catch (e) {
       _snack('Error', 'Failed to add transaction');
+    }
+  }
+
+  void addDepositLot({
+    required String depositId,
+    required double amount,
+    required String nepaliDate,
+    required double interestRate,
+    String? description,
+  }) {
+    try {
+      final idx = deposits.indexWhere((d) => d.depositId == depositId);
+      if (idx == -1) {
+        _snack('Error', 'Deposit account not found');
+        return;
+      }
+      final model = deposits[idx];
+      model.addDepositLot(
+        amount: amount,
+        nepaliDateString: nepaliDate,
+        rate: interestRate,
+        description: description,
+      );
+      model.save();
+      deposits[idx] = model;
+      filtered.value = deposits;
+      _recordEvent(model, 'deposit', amount, nepaliDate, description);
+      _snack('Success', 'Deposit recorded');
+    } catch (e) {
+      _snack('Error', 'Failed to add deposit');
+    }
+  }
+
+  List<DepositWithdrawalAllocation> previewPrincipalWithdrawal({
+    required String depositId,
+    required double amount,
+  }) {
+    final model = getById(depositId);
+    if (model == null) return [];
+    return model.previewPrincipalWithdrawal(amount);
+  }
+
+  void withdraw({
+    required String depositId,
+    required double amount,
+    required String nepaliDate,
+    required String source,
+    String? description,
+  }) {
+    try {
+      final idx = deposits.indexWhere((d) => d.depositId == depositId);
+      if (idx == -1) {
+        _snack('Error', 'Deposit account not found');
+        return;
+      }
+      final model = deposits[idx];
+      if (source == 'principal') {
+        model.withdrawPrincipal(
+          amount: amount,
+          nepaliDateString: nepaliDate,
+          description: description,
+        );
+      } else {
+        model.withdrawInterest(
+          amount: amount,
+          nepaliDateString: nepaliDate,
+          description: description,
+        );
+      }
+      model.save();
+      deposits[idx] = model;
+      filtered.value = deposits;
+      _recordEvent(model, 'withdrawal', amount, nepaliDate, description);
+      _snack('Success', 'Withdrawal recorded');
+    } catch (e) {
+      _snack('Error', e.toString().replaceFirst('Invalid argument(s): ', ''));
+    }
+  }
+
+  void processInterest(String depositId) {
+    try {
+      final idx = deposits.indexWhere((d) => d.depositId == depositId);
+      if (idx == -1) {
+        _snack('Error', 'Deposit account not found');
+        return;
+      }
+      final model = deposits[idx];
+      final generated = interestService.processMaturedDeposits(model);
+      model.save();
+      deposits[idx] = model;
+      filtered.value = deposits;
+      _snack(
+        generated.isEmpty ? 'Info' : 'Success',
+        generated.isEmpty
+            ? 'No eligible interest to apply'
+            : '${generated.length} interest transaction(s) applied',
+      );
+    } catch (e) {
+      _snack('Error', 'Failed to process interest');
     }
   }
 
@@ -142,6 +250,29 @@ class DepositController extends GetxController {
   DepositModel? getById(String depositId) {
     final idx = deposits.indexWhere((d) => d.depositId == depositId);
     return idx == -1 ? null : deposits[idx];
+  }
+
+  void _recordEvent(
+    DepositModel model,
+    String type,
+    double amount,
+    String nepaliDate,
+    String? description,
+  ) {
+    try {
+      final box = Hive.box<LoanPerformedEvent>('events');
+      box.add(
+        LoanPerformedEvent(
+          name: model.name,
+          serialNumber: '',
+          type: type,
+          amount: amount,
+          recordedDate: NepaliDate.parse(nepaliDate)?.toGregorian() ??
+              DateTime.now(),
+          description: description ?? type,
+        ),
+      );
+    } catch (_) {}
   }
 
   // Permissions (reuse approach from loan controller)

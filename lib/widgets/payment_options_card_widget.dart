@@ -77,8 +77,8 @@ class _PaymentOptionsCardState extends State<PaymentOptionsCard> {
     final selectedDate = await picker.showMaterialDatePicker(
       context: context,
       initialDate: initialNepaliDateTime,
-      firstDate: picker.NepaliDateTime(2000, 1, 1),
-      lastDate: picker.NepaliDateTime(2200, 12, 30),
+      firstDate: picker.NepaliDateTime(NepaliDate.pickerFirstYear, 1, 1),
+      lastDate: picker.NepaliDateTime(NepaliDate.pickerLastYear, 12, 30),
       helpText: 'Select Nepali Date (BS)',
     );
 

@@ -173,12 +173,13 @@ class LoanAppBar extends StatelessWidget implements PreferredSizeWidget {
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
-            onPressed: () => Get.toNamed('/backup'),
-            tooltip: 'Backup & Restore',
-          ),
-          const SizedBox(width: 8),
+          // OFFLINE MODE: Backup & Restore shortcut disabled for now.
+          // IconButton(
+          //   icon: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
+          //   onPressed: () => Get.toNamed('/backup'),
+          //   tooltip: 'Backup & Restore',
+          // ),
+          // const SizedBox(width: 8),
         ],
       ],
     );
