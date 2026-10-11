@@ -136,6 +136,36 @@ class DepositModel extends HiveObject {
   }
 }
 
+// Legacy model kept only so Hive can read deposit records created by older
+// versions that stored cash deposit lots with typeId 11.
+class CashDepositLot extends HiveObject {
+  String id;
+  String customerId;
+  double originalAmount;
+  double remainingPrincipal;
+  String depositDate;
+  String maturityDate;
+  double interestRate;
+  double acquiredInterest;
+  double remainingInterest;
+  String status;
+  bool interestApplied;
+
+  CashDepositLot({
+    required this.id,
+    required this.customerId,
+    required this.originalAmount,
+    required this.remainingPrincipal,
+    required this.depositDate,
+    required this.maturityDate,
+    required this.interestRate,
+    this.acquiredInterest = 0,
+    this.remainingInterest = 0,
+    this.status = 'Not Matured',
+    this.interestApplied = false,
+  });
+}
+
 // =========================
 // Manual Hive Adapters
 // =========================
@@ -220,5 +250,60 @@ class DepositModelAdapter extends TypeAdapter<DepositModel> {
       ..write(obj.description)
       ..writeByte(6)
       ..write(obj.transactions);
+  }
+}
+
+class CashDepositLotAdapter extends TypeAdapter<CashDepositLot> {
+  @override
+  final int typeId = 11;
+
+  @override
+  CashDepositLot read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{};
+    for (int i = 0; i < numOfFields; i++) {
+      fields[reader.readByte()] = reader.read();
+    }
+    return CashDepositLot(
+      id: fields[0] as String? ?? '',
+      customerId: fields[1] as String? ?? '',
+      originalAmount: (fields[2] as num?)?.toDouble() ?? 0,
+      remainingPrincipal: (fields[3] as num?)?.toDouble() ?? 0,
+      depositDate: fields[4] as String? ?? '',
+      maturityDate: fields[5] as String? ?? '',
+      interestRate: (fields[6] as num?)?.toDouble() ?? 0,
+      acquiredInterest: (fields[7] as num?)?.toDouble() ?? 0,
+      remainingInterest: (fields[8] as num?)?.toDouble() ?? 0,
+      status: fields[9] as String? ?? 'Not Matured',
+      interestApplied: fields[10] as bool? ?? false,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, CashDepositLot obj) {
+    writer
+      ..writeByte(11)
+      ..writeByte(0)
+      ..write(obj.id)
+      ..writeByte(1)
+      ..write(obj.customerId)
+      ..writeByte(2)
+      ..write(obj.originalAmount)
+      ..writeByte(3)
+      ..write(obj.remainingPrincipal)
+      ..writeByte(4)
+      ..write(obj.depositDate)
+      ..writeByte(5)
+      ..write(obj.maturityDate)
+      ..writeByte(6)
+      ..write(obj.interestRate)
+      ..writeByte(7)
+      ..write(obj.acquiredInterest)
+      ..writeByte(8)
+      ..write(obj.remainingInterest)
+      ..writeByte(9)
+      ..write(obj.status)
+      ..writeByte(10)
+      ..write(obj.interestApplied);
   }
 }

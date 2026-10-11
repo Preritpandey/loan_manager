@@ -1,3 +1,5 @@
+/*
+// rclone/Google Drive backup disabled.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -292,3 +294,4 @@ Future<void> showBackupIdentityDialog(
   );
   nameController.dispose();
 }
+*/

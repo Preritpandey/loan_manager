@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/otp_verify_controller.dart';
-import 'package:list/controllers/backup_controller.dart';
+// rclone/Google Drive backup disabled.
+// import 'package:list/controllers/backup_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/pages/add_loan_page.dart';
-import 'package:list/pages/backup_page.dart';
+// rclone/Google Drive backup disabled.
+// import 'package:list/pages/backup_page.dart';
 import 'package:list/pages/loan_page.dart';
 import 'package:list/pages/otp_verification_screen.dart';
 import 'package:list/pages/splash_screen.dart';
@@ -56,14 +58,13 @@ class _MyAppState extends State<MyApp> with WindowListener {
     final isPreventClose = await windowManager.isPreventClose();
     if (!isPreventClose) return;
 
-    final shouldClose = await _showBackupBeforeCloseDialog();
-    if (!shouldClose) return;
-
     _isClosing = true;
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
   }
 
+  /*
+  // rclone/Google Drive backup disabled.
   Future<bool> _showBackupBeforeCloseDialog() async {
     final context = Get.context;
     if (context == null || !context.mounted) return false;
@@ -163,6 +164,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
 
     return result ?? false;
   }
+  */
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +187,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
         GetPage(name: '/otp', page: () => OtpScreen()),
         GetPage(name: '/splash', page: () => SplashScreen()),
         GetPage(name: '/cash-deposits', page: () => const CashDepositsPage()),
-        GetPage(name: '/backup', page: () => const BackupPage()),
+        // rclone/Google Drive backup disabled.
+        // GetPage(name: '/backup', page: () => const BackupPage()),
         GetPage(
           name: '/loan-details',
           page: () {
@@ -196,7 +199,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
       ],
       initialBinding: BindingsBuilder(() {
         Get.put(AuthController());
-        Get.put(BackupController());
+        // rclone/Google Drive backup disabled.
+        // Get.put(BackupController());
       }),
     );
   }

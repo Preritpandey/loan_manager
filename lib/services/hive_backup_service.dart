@@ -1,3 +1,5 @@
+/*
+// rclone/Google Drive backup disabled.
 import 'dart:io';
 
 import 'package:hive/hive.dart';
@@ -466,3 +468,4 @@ class BackupException implements Exception {
   @override
   String toString() => message;
 }
+*/
