@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:list/controllers/loan_controller.dart';
-// rclone/Google Drive backup disabled.
-// import 'package:list/controllers/backup_controller.dart';
+import 'package:list/controllers/otp_verify_controller.dart';
 import 'package:list/models/loan.dart';
 import 'package:list/widgets/loan_app_bar.dart';
 import 'package:list/widgets/search_bar_widget.dart';
@@ -32,9 +33,8 @@ class _LoanHomePageState extends State<LoanHomePage>
   final searchFocusNode = FocusNode();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  Timer? _deviceAccessTimer;
   bool _showSuggestions = false;
-  // rclone/Google Drive backup disabled.
-  // bool _didAskBackupIdentity = false;
   CustomerLoanTab _selectedCustomerLoanTab = CustomerLoanTab.individual;
 
   @override
@@ -52,29 +52,13 @@ class _LoanHomePageState extends State<LoanHomePage>
 
     // Initialize BankLoanController
     Get.put(BankLoanController());
-    // rclone/Google Drive backup disabled.
-    // WidgetsBinding.instance.addPostFrameCallback(
-    //   (_) => _askForBackupIdentity(),
-    // );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.find<AuthController>().enforceDeviceAccess();
+    });
+    _deviceAccessTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      Get.find<AuthController>().enforceDeviceAccess();
+    });
   }
-
-  /*
-  // rclone/Google Drive backup disabled.
-  Future<void> _askForBackupIdentity() async {
-    if (_didAskBackupIdentity) {
-      return;
-    }
-    _didAskBackupIdentity = true;
-    final backupController = Get.find<BackupController>();
-    while (!backupController.isInitialized.value && mounted) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    if (!mounted || backupController.hasIdentity.value) {
-      return;
-    }
-    await showBackupIdentityDialog(context, backupController);
-  }
-  */
 
   @override
   void dispose() {
@@ -82,12 +66,14 @@ class _LoanHomePageState extends State<LoanHomePage>
     searchController.dispose();
     searchFocusNode.dispose();
     _animationController.dispose();
+    _deviceAccessTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      Get.find<AuthController>().enforceDeviceAccess();
       controller.refreshLoans();
     }
   }

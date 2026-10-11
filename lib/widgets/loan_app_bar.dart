@@ -173,13 +173,6 @@ class LoanAppBar extends StatelessWidget implements PreferredSizeWidget {
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
-          // rclone/Google Drive backup disabled.
-          // IconButton(
-          //   icon: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
-          //   onPressed: () => Get.toNamed('/backup'),
-          //   tooltip: 'Backup & Restore',
-          // ),
-          // const SizedBox(width: 8),
         ],
       ],
     );
